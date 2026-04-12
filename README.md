@@ -1,7 +1,5 @@
 # Transaction Patterns and Fraud Risk Indicators in Digital Banking
 
-CSDS 327 — Data Visualization | University of Southeastern Philippines
-
 ## Live Dashboard
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/WetCatto/data-analysis/main/app.py)
