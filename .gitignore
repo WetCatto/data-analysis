@@ -1,0 +1,27 @@
+# Raw data (too large for GitHub / Streamlit free tier)
+data/
+*.csv
+*.json
+!aggregates/*.csv
+!aggregates/*.json
+
+# Full parquet (245MB — regenerate with 01_load_and_clean.py)
+cleaned_transactions.parquet
+
+# PDFs
+*.pdf
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db

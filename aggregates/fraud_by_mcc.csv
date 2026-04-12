@@ -1,0 +1,109 @@
+mcc_label,fraud_rate_pct,fraud_count,total_count
+Cruise Lines,59.78260869565217,165,276
+Music Stores - Musical Instruments,37.254901960784316,76,204
+Miscellaneous Fabricated Metal Products,11.83673469387755,29,245
+"Computers, Computer Peripheral Equipment",10.833775889537971,204,1883
+Floor Covering Stores,10.36036036036036,23,222
+Miscellaneous Metal Fabrication,8.59375,22,256
+Electronics Stores,8.573256557901471,402,4689
+Fabricated Structural Metal Products,8.058608058608058,22,273
+Precious Stones and Metals,6.865248226950355,242,3525
+"Furniture, Home Furnishings, and Equipment Stores",6.538461538461539,170,2600
+Coated and Laminated Products,6.538461538461539,17,260
+Steel Drums and Barrels,6.296296296296296,17,270
+Digital Goods - Games,5.841371918542337,109,1866
+"Bolt, Nut, Screw, Rivet Manufacturing",5.084745762711865,12,236
+Automotive Parts and Accessories Stores,3.6159600997506236,29,802
+Household Appliance Stores,3.0973451327433628,7,226
+Bus Lines,2.9880478087649402,45,1506
+Sporting Goods Stores,2.251655629139073,17,755
+Antique Shops,2.1624339954739753,86,3977
+Passenger Railways,2.003873031910415,238,11877
+Airlines,1.986408782017773,38,1913
+Steelworks,1.8146150073565472,37,2039
+Cosmetic Stores,1.682965658403457,74,4397
+"Amusement Parks, Carnivals, Circuses",1.5901745313510018,123,7735
+"Florists Supplies, Nursery Stock and Flowers",1.5865146256817053,96,6051
+Non-Precious Metal Services,1.4565186348707697,102,7003
+"Gift, Card, Novelty Stores",1.2863913337846988,19,1477
+Gardening Supplies,1.2816914585087473,137,10689
+Industrial Equipment and Supplies,1.2180152960060429,129,10591
+Steel Products Manufacturing,1.212415130940834,25,2062
+Non-Ferrous Metal Foundries,1.198583492236448,88,7342
+"Digital Goods - Media, Books, Apps",1.0698882455262468,449,41967
+Semiconductors and Related Devices,1.0495736107206448,112,10671
+"Brick, Stone, and Related Materials",1.0275824770146025,19,1849
+"Electroplating, Plating, Polishing Services",1.0147765711233756,57,5617
+Miscellaneous Metalwork,1.0130246020260492,56,5528
+"Tools, Parts, Supplies Manufacturing",0.9876543209876543,20,2025
+Towing Services,0.9562841530054645,7,732
+Ironwork,0.9188074254640916,49,5333
+Pottery and Ceramics,0.913978494623656,17,1860
+Miscellaneous Machinery and Parts Manufacturing,0.8492346403858252,81,9538
+Leather Goods,0.8443271767810026,16,1895
+Ship Chandlers,0.8442776735459663,81,9594
+Computer Network Services,0.824827301783689,80,9699
+Railroad Passenger Transport,0.8185538881309686,78,9529
+Family Clothing Stores,0.7914157090879191,385,48647
+Welding Repair,0.7648879985430704,42,5491
+Travel Agencies,0.7549983688306846,162,21457
+Upholstery and Drapery Stores,0.7391763463569165,14,1894
+"Lodging - Hotels, Motels, Resorts",0.726457399103139,81,11150
+"Athletic Fields, Commercial Sports",0.711985082217325,84,11798
+Department Stores,0.7067259843459095,2251,318511
+"Lighting, Fixtures, Electrical Supplies",0.7057163020465773,70,9919
+Automotive Body Repair Shops,0.6605019815059445,5,757
+Heat Treating Metal Services,0.6497122702803044,35,5387
+Railroad Freight,0.638182801514332,59,9245
+Shoe Stores,0.5759220290176099,52,9029
+Miscellaneous Metals,0.5437737901033171,10,1839
+Miscellaneous Home Furnishing Stores,0.5433273156506041,313,57608
+Discount Stores,0.5182347440499532,859,165755
+Theatrical Producers,0.5062423873325214,133,26272
+Hospitals,0.3818413237165889,9,2357
+Hardware Stores,0.3024320577981266,72,23807
+Women's Ready-To-Wear Stores,0.2594407610262323,18,6938
+Motor Freight Carriers and Trucking,0.24721323265012585,165,66744
+Wholesale Clubs,0.24569659074286648,991,403343
+Money Transfer,0.18382306332894693,725,394401
+Lumber and Building Materials,0.17712354797382698,206,116303
+"Artist Supply Stores, Craft Shops",0.1722576798215587,78,45281
+"Sports Apparel, Riding Apparel Stores",0.16870893269401527,19,11262
+"Betting (including Lottery Tickets, Casinos)",0.15926550496533634,34,21348
+"Package Stores, Beer, Wine, Liquor",0.13553902828942796,117,86322
+Telecommunication Services,0.11077377533437269,162,146244
+"Optometrists, Optical Goods and Eyeglasses",0.09897426669066042,11,11114
+Drug Stores and Pharmacies,0.09257827599536142,479,517400
+Taxicabs and Limousines,0.08939586275947149,300,335586
+Drinking Places (Alcoholic Beverages),0.08170130962393368,136,166460
+Motion Picture Theaters,0.07317399952591493,71,97029
+Laundry Services,0.0711777545791022,15,21074
+Postal Services - Government Only,0.07074158250425201,47,66439
+Fast Food Restaurants,0.0702892026811592,235,334333
+Car Washes,0.05698871623418564,15,26321
+"Cable, Satellite, and Other Pay Television Services",0.04615473374487971,16,34666
+Dentists and Orthodontists,0.045989698307579104,10,21744
+"Grocery Stores, Supermarkets",0.03983753783394402,425,1066833
+"Doctors, Physicians",0.03662780050057994,6,16381
+Chiropractors,0.028421202216853774,2,7037
+Book Stores,0.026960752846927116,42,155782
+Medical Services,0.019823570224997523,2,10089
+Eating Places and Restaurants,0.018064878293481117,121,669808
+Service Stations,0.0175893576010629,168,955123
+Podiatrists,0.01419849495953429,1,7043
+Miscellaneous Food Stores,0.013375590670168145,131,979396
+Cleaning and Maintenance Services,0.01169077889814409,4,34215
+Beauty and Barber Shops,0.011207464171137977,8,71381
+"Recreational Sports, Clubs",0.009303190994511117,1,10749
+Automotive Service Shops,0.0040609137055837565,13,320125
+"Books, Periodicals, Newspapers",0.0,0,6908
+"Accounting, Auditing, and Bookkeeping Services",0.0,0,2354
+"Detective Agencies, Security Services",0.0,0,8507
+Lawn and Garden Supply Stores,0.0,0,4709
+"Insurance Sales, Underwriting",0.0,0,34196
+Legal Services and Attorneys,0.0,0,4779
+"Heating, Plumbing, Air Conditioning Contractors",0.0,0,2101
+Local and Suburban Commuter Transportation,0.0,0,56380
+Tax Preparation Services,0.0,0,2523
+Tolls and Bridge Fees,0.0,0,451814
+"Utilities - Electric, Gas, Water, Sanitary",0.0,0,162371
