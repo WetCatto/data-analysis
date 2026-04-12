@@ -337,8 +337,10 @@ fig_gauge = go.Figure(go.Indicator(
     mode="gauge+number+delta",
     value=fraud_rate,
     number=dict(suffix="%", font=dict(size=32, color=TXT_PRI, family="Inter, system-ui")),
-    delta=dict(reference=0.15, suffix="%", increasing=dict(color=DANGER),
-               decreasing=dict(color=SAFE)),
+    delta=dict(reference=0.15, suffix="%",
+               increasing=dict(color=DANGER),
+               decreasing=dict(color=SAFE),
+               font=dict(size=15, color=TXT_SEC)),
     gauge=dict(
         axis=dict(range=[0, 0.5], ticksuffix="%",
                   tickfont=dict(size=10, color=TXT_SEC)),
@@ -434,7 +436,7 @@ with col_amt:
         ))
         fig_amt.update_layout(**chart_layout(showlegend=True, barmode="overlay", height=420))
         fig_amt.update_xaxes(xax(title="Amount (USD)", type="log"))
-        fig_amt.update_yaxes(yax(title="Density"))
+        fig_amt.update_yaxes(yax(title="Density", rangemode="tozero"))
     except StopIteration:
         # fallback: build from sample
         legit_s = sample.loc[sample["is_fraud"] == 0, "amount"].clip(upper=10000)
@@ -460,7 +462,7 @@ with col_amt:
                           annotation_font=dict(size=9, color=DANGER))
         fig_amt.update_layout(**chart_layout(showlegend=True, barmode="overlay", height=420))
         fig_amt.update_xaxes(xax(title="Amount (USD)", type="log"))
-        fig_amt.update_yaxes(yax(title="Density"))
+        fig_amt.update_yaxes(yax(title="Density", rangemode="tozero"))
     pchart(fig_amt, height=420)
 
 insight_row(
@@ -482,13 +484,11 @@ with col_heat:
                 f"letter-spacing:1px;color:{TXT_PRI};margin-bottom:8px;'>Fraud Rate — Hour × Day of Week</p>",
                 unsafe_allow_html=True)
     heat_df = load_heatmap()
-    # pivot: index=day_of_week, columns=hour, values=fraud_rate_pct
-    pivot_col = next((c for c in heat_df.columns if "rate" in c.lower()), heat_df.columns[-1])
-    hour_col  = next((c for c in heat_df.columns if "hour" in c.lower()), heat_df.columns[1])
-    day_col   = next((c for c in heat_df.columns if "day" in c.lower()), heat_df.columns[0])
-    heat_pivot = heat_df.pivot_table(index=day_col, columns=hour_col, values=pivot_col, aggfunc="mean")
-    day_order  = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    existing   = [d for d in day_order if d in heat_pivot.index]
+    # CSV is already pivoted: first col = day_of_week, remaining cols = hours 0-23
+    heat_pivot = heat_df.set_index(heat_df.columns[0])
+    heat_pivot.columns = [str(c) for c in heat_pivot.columns]
+    day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    existing  = [d for d in day_order if d in heat_pivot.index]
     if existing:
         heat_pivot = heat_pivot.reindex(existing)
 
@@ -795,7 +795,7 @@ with ex_c1:
                                               title_font=dict(size=11, color=TXT_PRI),
                                               height=300))
     fig_ex_hist.update_xaxes(xax(title="Amount (USD)", type="log"))
-    fig_ex_hist.update_yaxes(yax(title="Density"))
+    fig_ex_hist.update_yaxes(yax(title="Density", rangemode="tozero"))
     pchart(fig_ex_hist, height=300)
 
 with ex_c2:
