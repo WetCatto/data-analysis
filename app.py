@@ -129,33 +129,34 @@ def chart_layout(**kw) -> dict:
 
 
 def xax(**kw) -> dict:
-    return dict(
+    base = dict(
         showgrid=False, showline=True,
         linecolor=BORDER, linewidth=1,
         tickfont=dict(size=11, color=TXT_SEC),
         title_font=dict(size=11, color=TXT_SEC),
         zeroline=False,
-        **kw,
     )
+    base.update(kw)
+    return base
 
 
 def yax(**kw) -> dict:
-    return dict(
+    base = dict(
         showgrid=True, gridcolor="#F1F5F9", gridwidth=1,
         showline=False,
         tickfont=dict(size=11, color=TXT_SEC),
         title_font=dict(size=11, color=TXT_SEC),
         zeroline=False,
-        **kw,
     )
+    base.update(kw)
+    return base
 
 
 def pchart(fig, height: int = 380):
     st.plotly_chart(
         fig,
         config={"displayModeBar": False},
-        use_container_width=True,
-        height=height,
+        width="stretch",
     )
 
 
@@ -790,7 +791,7 @@ if not show_cols:
 display = df_ex[show_cols].head(200)
 if "is_fraud" in display.columns:
     display = display.rename(columns={"is_fraud": "fraud"})
-st.dataframe(display, hide_index=True, height=240, use_container_width=True)
+st.dataframe(display, hide_index=True, height=240, width="stretch")
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown(f"""
