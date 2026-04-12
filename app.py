@@ -734,136 +734,92 @@ insight_row(
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 5: EXPLORER
+# SECTION 5: RISK FACTOR SUMMARY
 # ══════════════════════════════════════════════════════════════════════════════
-section("EXPLORER", "interactive slice of the 93K stratified sample")
+section("RISK FACTOR SUMMARY", "all segments ranked by fraud rate — full dataset")
 
-st.markdown(f"<p style='font-size:0.75rem;color:{TXT_SEC};margin-bottom:12px;'>"
-            "Filters apply to the stratified sample (all 13,332 fraud + 80K random legitimate). "
-            "Not a replacement for full-dataset analysis.</p>", unsafe_allow_html=True)
 
-f1, f2, f3 = st.columns([1, 1, 2], gap="medium")
+def _risk_rows(df: pd.DataFrame, label_col: str, rate_col: str,
+               category: str, top_n: int | None = None) -> pd.DataFrame:
+    r_col = next((c for c in df.columns if "rate" in c.lower()), df.columns[-1])
+    l_col = next((c for c in df.columns if c == label_col), df.columns[0])
+    sub = df[[l_col, r_col]].rename(columns={l_col: "Segment", r_col: "fraud_rate"})
+    sub["Category"] = category
+    if top_n:
+        sub = sub.nlargest(top_n, "fraud_rate")
+    return sub
 
-with f1:
-    amt_min, amt_max = float(sample["amount"].min()), float(sample["amount"].max())
-    lo, hi = st.slider(
-        "Amount range ($)",
-        min_value=0.0, max_value=min(amt_max, 5000.0),
-        value=(0.0, min(amt_max, 5000.0)),
-        step=10.0,
-        key="explorer_amt",
-    )
 
-with f2:
-    fraud_filter = st.selectbox(
-        "Transaction type",
-        ["All", "Fraud only", "Legitimate only"],
-        key="explorer_fraud",
-    )
+rows = []
+mcc_df2 = load_mcc()
+r_mcc = next((c for c in mcc_df2.columns if "rate" in c.lower()), mcc_df2.columns[-1])
+l_mcc = next((c for c in mcc_df2.columns if "desc" in c.lower() or "name" in c.lower()
+              or "mcc" in c.lower()), mcc_df2.columns[0])
+rows.append(_risk_rows(mcc_df2, l_mcc, r_mcc, "Merchant (MCC)", top_n=8))
 
-with f3:
-    if "use_chip" in sample.columns:
-        channels = ["All"] + sorted(sample["use_chip"].dropna().unique().tolist())
-        channel_sel = st.selectbox("Channel", channels, key="explorer_channel")
-    else:
-        channel_sel = "All"
+for df_src, label_c, cat in [
+    (load_use_chip(),   next((c for c in load_use_chip().columns
+                              if "chip" in c.lower() or "use" in c.lower()), load_use_chip().columns[0]),
+     "Payment channel"),
+    (load_card_type(),  next((c for c in load_card_type().columns
+                              if "type" in c.lower()), load_card_type().columns[0]),
+     "Card type"),
+    (load_has_chip(),   next((c for c in load_has_chip().columns
+                              if "chip" in c.lower()), load_has_chip().columns[0]),
+     "Chip status"),
+    (load_age(),        next((c for c in load_age().columns
+                              if "age" in c.lower()), load_age().columns[0]),
+     "Age group"),
+    (load_income(),     next((c for c in load_income().columns
+                              if "income" in c.lower()), load_income().columns[0]),
+     "Income bracket"),
+    (load_gender(),     next((c for c in load_gender().columns
+                              if "gender" in c.lower() or "sex" in c.lower()), load_gender().columns[0]),
+     "Gender"),
+]:
+    r_c = next((c for c in df_src.columns if "rate" in c.lower()), df_src.columns[-1])
+    rows.append(_risk_rows(df_src, label_c, r_c, cat))
 
-# Apply filters
-df_ex = sample.copy()
-df_ex = df_ex[(df_ex["amount"] >= lo) & (df_ex["amount"] <= hi)]
-if fraud_filter == "Fraud only":
-    df_ex = df_ex[df_ex["is_fraud"] == 1]
-elif fraud_filter == "Legitimate only":
-    df_ex = df_ex[df_ex["is_fraud"] == 0]
-if channel_sel != "All" and "use_chip" in df_ex.columns:
-    df_ex = df_ex[df_ex["use_chip"] == channel_sel]
-
-n_total = len(df_ex)
-n_fraud = int(df_ex["is_fraud"].sum()) if "is_fraud" in df_ex.columns else 0
-r_fraud = n_fraud / n_total * 100 if n_total > 0 else 0.0
-
-st.markdown(
-    f"<p style='font-size:0.75rem;color:{TXT_SEC};'>"
-    f"Showing <strong style='color:{TXT_PRI};'>{n_total:,}</strong> transactions &nbsp;|&nbsp; "
-    f"Fraud: <strong style='color:{DANGER};'>{n_fraud:,}</strong> "
-    f"(<strong style='color:{DANGER};'>{r_fraud:.2f}%</strong>)</p>",
-    unsafe_allow_html=True,
+summary = (pd.concat(rows, ignore_index=True)
+             .sort_values("fraud_rate", ascending=False)
+             .reset_index(drop=True))
+summary["Fraud Rate"] = summary["fraud_rate"].apply(lambda x: f"{x:.3f}%")
+summary["vs Average"] = summary["fraud_rate"].apply(
+    lambda x: f"{x / AVG_RATE:.1f}×" if AVG_RATE > 0 else "—"
+)
+summary["Risk"] = summary["fraud_rate"].apply(
+    lambda x: "HIGH" if x >= 0.3 else ("MED" if x >= 0.15 else "LOW")
 )
 
-ex_c1, ex_c2 = st.columns(2, gap="medium")
+# Color-coded risk badge via HTML
+def _badge(risk: str) -> str:
+    colors = {"HIGH": (DANGER, "#FEF2F2"), "MED": (WARNING, "#FFFBEB"), "LOW": (SAFE, "#F0FDF4")}
+    fg, bg = colors.get(risk, (TXT_SEC, BORDER))
+    return (f'<span style="background:{bg};color:{fg};font-size:0.65rem;font-weight:700;'
+            f'padding:2px 8px;border-radius:4px;letter-spacing:0.8px;">{risk}</span>')
 
-with ex_c1:
-    fig_ex_hist = go.Figure()
-    for label, mask_val, color in [("Legitimate", 0, "rgba(76,120,168,0.6)"),
-                                    ("Fraud",       1, "rgba(239,68,68,0.6)")]:
-        sub = df_ex[df_ex["is_fraud"] == mask_val]["amount"] if "is_fraud" in df_ex.columns else df_ex["amount"]
-        if len(sub) > 0:
-            fig_ex_hist.add_trace(go.Histogram(
-                x=sub, histnorm="probability density", name=label,
-                marker_color=color, marker_line_width=0, opacity=0.7,
-            ))
-    fig_ex_hist.update_layout(**chart_layout(showlegend=True, barmode="overlay",
-                                              title_text="Amount distribution",
-                                              title_font=dict(size=11, color=TXT_PRI),
-                                              height=300))
-    fig_ex_hist.update_xaxes(xax(title="Amount (USD)", type="log"))
-    fig_ex_hist.update_yaxes(yax(title="Density", rangemode="tozero"))
-    pchart(fig_ex_hist, height=300)
-
-with ex_c2:
-    if "mcc_desc" in df_ex.columns or "mcc" in df_ex.columns:
-        mcc_col_ex = "mcc_desc" if "mcc_desc" in df_ex.columns else "mcc"
-        mcc_ex = (df_ex[df_ex["is_fraud"] == 1][mcc_col_ex].value_counts().head(10)
-                  if "is_fraud" in df_ex.columns else
-                  df_ex[mcc_col_ex].value_counts().head(10))
-        fig_ex_mcc = go.Figure(go.Bar(
-            y=mcc_ex.index.str[:35],
-            x=mcc_ex.values,
-            orientation="h",
-            marker=dict(color=DANGER, opacity=0.7, line_width=0),
-            hovertemplate="%{y}<br>Count: %{x}<extra></extra>",
-        ))
-        fig_ex_mcc.update_layout(**chart_layout(title_text="Top fraud MCCs (filtered)",
-                                                  title_font=dict(size=11, color=TXT_PRI),
-                                                  height=300))
-        fig_ex_mcc.update_xaxes(xax(title="Fraud count"))
-        fig_ex_mcc.update_yaxes(yax(title="", showgrid=False))
-        pchart(fig_ex_mcc, height=300)
-    else:
-        # mcc_desc not in sample — show fraud rate by channel instead
-        ch_col = next((c for c in ["use_chip", "card_type", "card_brand"] if c in df_ex.columns), None)
-        if ch_col and "is_fraud" in df_ex.columns and len(df_ex) > 0:
-            ch_rates = (df_ex.groupby(ch_col)["is_fraud"]
-                        .agg(fraud_count="sum", total="count")
-                        .assign(rate=lambda d: d["fraud_count"] / d["total"] * 100)
-                        .sort_values("rate", ascending=True)
-                        .reset_index())
-            fig_ch_ex = go.Figure(go.Bar(
-                x=ch_rates["rate"], y=ch_rates[ch_col],
-                orientation="h",
-                marker=dict(color=[rate_color(r) for r in ch_rates["rate"]],
-                            opacity=0.8, line_width=0),
-                text=[f"{r:.2f}%" for r in ch_rates["rate"]],
-                textposition="outside",
-                textfont=dict(size=10, color=TXT_SEC),
-                hovertemplate="%{y}<br>Fraud rate: %{x:.2f}%<extra></extra>",
-            ))
-            fig_ch_ex.update_layout(**chart_layout(title_text="Fraud rate by channel (filtered)",
-                                                    title_font=dict(size=11, color=TXT_PRI),
-                                                    height=300))
-            fig_ch_ex.update_xaxes(xax(title="Fraud rate (%)"))
-            fig_ch_ex.update_yaxes(yax(title="", showgrid=False))
-            pchart(fig_ch_ex, height=300)
-
-# Transaction table
-show_cols = [c for c in ["transaction_id", "amount", "is_fraud", "use_chip", "mcc_desc",
-                          "merchant_city", "date"] if c in df_ex.columns]
-if not show_cols:
-    show_cols = df_ex.columns[:6].tolist()
-display = df_ex[show_cols].head(200)
-if "is_fraud" in display.columns:
-    display = display.rename(columns={"is_fraud": "fraud"})
-st.dataframe(display, hide_index=True, height=240, width="stretch")
+table_html = summary[["Category", "Segment", "Fraud Rate", "vs Average", "Risk"]].to_html(
+    index=False, escape=False,
+    formatters={"Risk": _badge},
+    border=0,
+)
+styled = f"""
+<style>
+.risk-table {{ width:100%; border-collapse:collapse; font-size:0.8rem; }}
+.risk-table th {{
+    font-size:0.65rem; font-weight:600; text-transform:uppercase;
+    letter-spacing:1.2px; color:{TXT_SEC}; padding:8px 12px;
+    border-bottom:2px solid {BORDER}; text-align:left; background:{CARD};
+}}
+.risk-table td {{
+    padding:7px 12px; border-bottom:1px solid {BORDER};
+    color:{TXT_PRI}; vertical-align:middle;
+}}
+.risk-table tr:hover td {{ background:#F8FAFC; }}
+</style>
+{table_html.replace('<table', '<table class="risk-table"')}
+"""
+st.markdown(styled, unsafe_allow_html=True)
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown(f"""
