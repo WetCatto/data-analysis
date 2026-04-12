@@ -652,7 +652,7 @@ col_age, col_inc, col_corr = st.columns([1, 1, 2], gap="medium")
 
 def demographic_bar(df: pd.DataFrame, label_col: str, rate_col: str,
                     title: str, height: int = 320) -> go.Figure:
-    df_s = df.sort_values(label_col)
+    df_s = df  # preserve CSV row order (age/income brackets already ordered correctly)
     colors = [rate_color(r) for r in df_s[rate_col]]
     fig = go.Figure(go.Bar(
         x=df_s[label_col],
