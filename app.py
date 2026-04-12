@@ -151,7 +151,7 @@ def chart_layout(**kw) -> dict:
         paper_bgcolor=CARD,
         plot_bgcolor=CARD,
         font=dict(family="Inter, system-ui, sans-serif", size=12, color=TXT_PRI),
-        margin=dict(l=10, r=10, t=36, b=10),
+        margin=dict(l=10, r=10, t=52, b=10),
         showlegend=kw.pop("showlegend", False),
         legend=dict(
             bgcolor="rgba(0,0,0,0)", bordercolor="rgba(0,0,0,0)",
@@ -330,13 +330,9 @@ with k5:
 section("FRAUD RATE GAUGE", "threshold zones: green < 0.10% · amber 0.10–0.30% · red > 0.30%")
 
 fig_gauge = go.Figure(go.Indicator(
-    mode="gauge+number+delta",
+    mode="gauge+number",
     value=fraud_rate,
     number=dict(suffix="%", font=dict(size=32, color=TXT_PRI, family="Inter, system-ui")),
-    delta=dict(reference=0.15, suffix="%",
-               increasing=dict(color=DANGER),
-               decreasing=dict(color=SAFE),
-               font=dict(size=15, color=TXT_SEC)),
     gauge=dict(
         axis=dict(range=[0, 0.5], ticksuffix="%",
                   tickfont=dict(size=10, color=TXT_SEC)),
@@ -434,7 +430,10 @@ with col_amt:
             name="Fraud", marker_color="rgba(239,68,68,0.65)",
             marker_line_width=0, width=bin_spacing,
         ))
-        fig_amt.update_layout(**chart_layout(showlegend=True, barmode="overlay", height=420))
+        fig_amt.update_layout(**chart_layout(showlegend=True, barmode="overlay", height=468,
+                              legend=dict(orientation="h", y=-0.18, yanchor="top",
+                                          bgcolor="rgba(0,0,0,0)", bordercolor="rgba(0,0,0,0)",
+                                          font=dict(size=11, color=TXT_SEC))))
         # x is already log10(amount) — show dollar labels at integer log10 ticks
         fig_amt.update_xaxes(xax(
             title="Amount (USD, log scale)",
@@ -465,14 +464,17 @@ with col_amt:
         fig_amt.add_vline(x=med_fraud, line_dash="dash", line_color=DANGER, line_width=1.5,
                           annotation_text=f"Med ${fraud_s.median():.0f}",
                           annotation_font=dict(size=9, color=DANGER))
-        fig_amt.update_layout(**chart_layout(showlegend=True, barmode="overlay", height=420))
+        fig_amt.update_layout(**chart_layout(showlegend=True, barmode="overlay", height=468,
+                              legend=dict(orientation="h", y=-0.18, yanchor="top",
+                                          bgcolor="rgba(0,0,0,0)", bordercolor="rgba(0,0,0,0)",
+                                          font=dict(size=11, color=TXT_SEC))))
         fig_amt.update_xaxes(xax(
             title="Amount (USD, log scale)",
             tickvals=[0, 1, 2, 3, 4],
             ticktext=["$1", "$10", "$100", "$1K", "$10K"],
         ))
         fig_amt.update_yaxes(yax(title="Density", rangemode="tozero"))
-    pchart(fig_amt, height=420)
+    pchart(fig_amt, height=468)
 
 insight_row(
     "High-risk MCC categories show fraud rates 5–10× above the 0.15% dataset average, "
