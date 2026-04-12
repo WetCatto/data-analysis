@@ -147,7 +147,7 @@ def insight_row(finding: str, insight: str):
 # ── Plotly base helpers ────────────────────────────────────────────────────────
 def chart_layout(**kw) -> dict:
     """Base layout dict — NO xaxis/yaxis keys (use update_xaxes/update_yaxes)."""
-    return dict(
+    base = dict(
         paper_bgcolor=CARD,
         plot_bgcolor=CARD,
         font=dict(family="Inter, system-ui, sans-serif", size=12, color=TXT_PRI),
@@ -162,8 +162,9 @@ def chart_layout(**kw) -> dict:
             bgcolor=TXT_PRI, bordercolor=TXT_PRI,
             font=dict(size=11, color="white"),
         ),
-        **kw,
     )
+    base.update(kw)
+    return base
 
 
 def xax(**kw) -> dict:
