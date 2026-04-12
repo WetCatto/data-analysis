@@ -286,10 +286,10 @@ stats   = load_stats()
 sample  = load_sample()
 
 total_tx    = stats.get("total_transactions", 0)
-total_fraud = stats.get("total_fraud", 0)
+total_fraud = stats.get("fraud_count", 0)
 fraud_rate  = stats.get("fraud_rate_pct", 0.0)
-total_vol   = stats.get("total_volume_usd", 0)
-avg_amount  = stats.get("avg_amount", 0)
+avg_legit   = stats.get("mean_legit_amount", 0.0)
+avg_fraud   = stats.get("mean_fraud_amount", 0.0)
 
 # ── Header ─────────────────────────────────────────────────────────────────────
 st.markdown(f"""
@@ -318,17 +318,13 @@ k1, k2, k3, k4, k5 = st.columns(5)
 with k1:
     st.metric("Total Transactions", f"{total_tx:,.0f}")
 with k2:
-    st.metric("Fraud Cases", f"{total_fraud:,.0f}", delta=None)
+    st.metric("Fraud Cases", f"{total_fraud:,.0f}")
 with k3:
-    st.metric("Fraud Rate", f"{fraud_rate:.3f}%",
-              delta=f"{fraud_rate - 0.15:+.3f}% vs 0.15 base",
-              delta_color="inverse")
+    st.metric("Fraud Rate", f"{fraud_rate:.3f}%")
 with k4:
-    vol_b = total_vol / 1e9 if total_vol > 1e9 else total_vol / 1e6
-    vol_s = f"${vol_b:.1f}{'B' if total_vol > 1e9 else 'M'}"
-    st.metric("Transaction Volume", vol_s)
+    st.metric("Avg Legit Tx", f"${avg_legit:,.2f}")
 with k5:
-    st.metric("Avg Transaction", f"${avg_amount:,.2f}")
+    st.metric("Avg Fraud Tx", f"${avg_fraud:,.2f}")
 
 # ── Gauge ──────────────────────────────────────────────────────────────────────
 section("FRAUD RATE GAUGE", "threshold zones: green < 0.10% · amber 0.10–0.30% · red > 0.30%")
@@ -420,48 +416,61 @@ with col_amt:
     hist_df = load_histogram()
     # expect columns: bin_start, legit_density, fraud_density (or similar)
     # fallback: use sample
-    try:
-        legit_col  = next(c for c in hist_df.columns if "legit" in c.lower() or "not" in c.lower())
-        fraud_col2 = next(c for c in hist_df.columns if "fraud" in c.lower() and "rate" not in c.lower())
-        bin_col    = next(c for c in hist_df.columns if "bin" in c.lower() or "amount" in c.lower()
-                          or "start" in c.lower())
+    # CSV x-axis is log10(amount) — plot on linear scale with dollar tick labels
+    legit_col  = next((c for c in hist_df.columns if "legit" in c.lower()), None)
+    fraud_col2 = next((c for c in hist_df.columns if "fraud" in c.lower() and "rate" not in c.lower()), None)
+    bin_col    = hist_df.columns[0]  # log10_amount is always first column
+    bin_spacing = float(hist_df[bin_col].diff().median()) if len(hist_df) > 1 else 0.05
+
+    if legit_col and fraud_col2:
         fig_amt = go.Figure()
         fig_amt.add_trace(go.Bar(
             x=hist_df[bin_col], y=hist_df[legit_col],
-            name="Legitimate", marker_color=f"rgba(76,120,168,0.6)", marker_line_width=0,
+            name="Legitimate", marker_color="rgba(76,120,168,0.65)",
+            marker_line_width=0, width=bin_spacing,
         ))
         fig_amt.add_trace(go.Bar(
             x=hist_df[bin_col], y=hist_df[fraud_col2],
-            name="Fraud", marker_color=f"rgba(239,68,68,0.6)", marker_line_width=0,
+            name="Fraud", marker_color="rgba(239,68,68,0.65)",
+            marker_line_width=0, width=bin_spacing,
         ))
         fig_amt.update_layout(**chart_layout(showlegend=True, barmode="overlay", height=420))
-        fig_amt.update_xaxes(xax(title="Amount (USD)", type="log"))
+        # x is already log10(amount) — show dollar labels at integer log10 ticks
+        fig_amt.update_xaxes(xax(
+            title="Amount (USD, log scale)",
+            tickvals=[0, 1, 2, 3, 4],
+            ticktext=["$1", "$10", "$100", "$1K", "$10K"],
+        ))
         fig_amt.update_yaxes(yax(title="Density", rangemode="tozero"))
-    except StopIteration:
+    else:
         # fallback: build from sample
-        legit_s = sample.loc[sample["is_fraud"] == 0, "amount"].clip(upper=10000)
-        fraud_s = sample.loc[sample["is_fraud"] == 1, "amount"].clip(upper=10000)
+        legit_s = sample.loc[sample["is_fraud"] == 0, "amount"].clip(lower=0.01, upper=10000)
+        fraud_s = sample.loc[sample["is_fraud"] == 1, "amount"].clip(lower=0.01, upper=10000)
         fig_amt = go.Figure()
         fig_amt.add_trace(go.Histogram(
-            x=legit_s, histnorm="probability density", name="Legitimate",
-            marker_color="rgba(76,120,168,0.6)", marker_line_width=0,
-            opacity=0.7,
+            x=np.log10(legit_s), histnorm="probability density", name="Legitimate",
+            marker_color="rgba(76,120,168,0.65)", marker_line_width=0, opacity=0.7,
+            xbins=dict(size=0.1),
         ))
         fig_amt.add_trace(go.Histogram(
-            x=fraud_s, histnorm="probability density", name="Fraud",
-            marker_color="rgba(239,68,68,0.6)", marker_line_width=0,
-            opacity=0.7,
+            x=np.log10(fraud_s), histnorm="probability density", name="Fraud",
+            marker_color="rgba(239,68,68,0.65)", marker_line_width=0, opacity=0.7,
+            xbins=dict(size=0.1),
         ))
-        med_legit = float(legit_s.median())
-        med_fraud = float(fraud_s.median())
+        med_legit = float(np.log10(legit_s.median()))
+        med_fraud = float(np.log10(fraud_s.median()))
         fig_amt.add_vline(x=med_legit, line_dash="dash", line_color="#4C78A8", line_width=1.5,
-                          annotation_text=f"Med ${med_legit:.0f}",
+                          annotation_text=f"Med ${legit_s.median():.0f}",
                           annotation_font=dict(size=9, color="#4C78A8"))
         fig_amt.add_vline(x=med_fraud, line_dash="dash", line_color=DANGER, line_width=1.5,
-                          annotation_text=f"Med ${med_fraud:.0f}",
+                          annotation_text=f"Med ${fraud_s.median():.0f}",
                           annotation_font=dict(size=9, color=DANGER))
         fig_amt.update_layout(**chart_layout(showlegend=True, barmode="overlay", height=420))
-        fig_amt.update_xaxes(xax(title="Amount (USD)", type="log"))
+        fig_amt.update_xaxes(xax(
+            title="Amount (USD, log scale)",
+            tickvals=[0, 1, 2, 3, 4],
+            ticktext=["$1", "$10", "$100", "$1K", "$10K"],
+        ))
         fig_amt.update_yaxes(yax(title="Density", rangemode="tozero"))
     pchart(fig_amt, height=420)
 
@@ -667,16 +676,16 @@ with col_age:
     lbl_age  = next((c for c in age_df.columns if "age" in c.lower() or "group" in c.lower()),
                     age_df.columns[0])
     rate_age = next((c for c in age_df.columns if "rate" in c.lower()), age_df.columns[-1])
-    fig_age  = demographic_bar(age_df, lbl_age, rate_age, "Fraud Rate by Age Group")
-    pchart(fig_age, height=320)
+    fig_age  = demographic_bar(age_df, lbl_age, rate_age, "Fraud Rate by Age Group", height=400)
+    pchart(fig_age, height=400)
 
 with col_inc:
     inc_df   = load_income()
     lbl_inc  = next((c for c in inc_df.columns if "income" in c.lower() or "bracket" in c.lower()),
                     inc_df.columns[0])
     rate_inc = next((c for c in inc_df.columns if "rate" in c.lower()), inc_df.columns[-1])
-    fig_inc  = demographic_bar(inc_df, lbl_inc, rate_inc, "Fraud Rate by Income")
-    pchart(fig_inc, height=320)
+    fig_inc  = demographic_bar(inc_df, lbl_inc, rate_inc, "Fraud Rate by Income", height=400)
+    pchart(fig_inc, height=400)
 
 with col_corr:
     st.markdown(f"<p style='font-size:0.72rem;font-weight:600;text-transform:uppercase;"
@@ -709,10 +718,10 @@ with col_corr:
             title=dict(text="r", font=dict(size=10, color=TXT_SEC), side="right"),
         ),
     ))
-    fig_corr.update_layout(**chart_layout(height=320))
+    fig_corr.update_layout(**chart_layout(height=400))
     fig_corr.update_xaxes(xax(title="", tickangle=30, showline=False))
     fig_corr.update_yaxes(yax(title="", showgrid=False, autorange="reversed"))
-    pchart(fig_corr, height=320)
+    pchart(fig_corr, height=400)
 
 insight_row(
     "Younger cardholders (18–30) and lower-income brackets show slightly elevated fraud exposure, "
@@ -818,8 +827,30 @@ with ex_c2:
         fig_ex_mcc.update_yaxes(yax(title="", showgrid=False))
         pchart(fig_ex_mcc, height=300)
     else:
-        st.info("MCC description column not in sample — re-run 04_precompute_aggregates.py "
-                "with mcc_desc joined.")
+        # mcc_desc not in sample — show fraud rate by channel instead
+        ch_col = next((c for c in ["use_chip", "card_type", "card_brand"] if c in df_ex.columns), None)
+        if ch_col and "is_fraud" in df_ex.columns and len(df_ex) > 0:
+            ch_rates = (df_ex.groupby(ch_col)["is_fraud"]
+                        .agg(fraud_count="sum", total="count")
+                        .assign(rate=lambda d: d["fraud_count"] / d["total"] * 100)
+                        .sort_values("rate", ascending=True)
+                        .reset_index())
+            fig_ch_ex = go.Figure(go.Bar(
+                x=ch_rates["rate"], y=ch_rates[ch_col],
+                orientation="h",
+                marker=dict(color=[rate_color(r) for r in ch_rates["rate"]],
+                            opacity=0.8, line_width=0),
+                text=[f"{r:.2f}%" for r in ch_rates["rate"]],
+                textposition="outside",
+                textfont=dict(size=10, color=TXT_SEC),
+                hovertemplate="%{y}<br>Fraud rate: %{x:.2f}%<extra></extra>",
+            ))
+            fig_ch_ex.update_layout(**chart_layout(title_text="Fraud rate by channel (filtered)",
+                                                    title_font=dict(size=11, color=TXT_PRI),
+                                                    height=300))
+            fig_ch_ex.update_xaxes(xax(title="Fraud rate (%)"))
+            fig_ch_ex.update_yaxes(yax(title="", showgrid=False))
+            pchart(fig_ch_ex, height=300)
 
 # Transaction table
 show_cols = [c for c in ["transaction_id", "amount", "is_fraud", "use_chip", "mcc_desc",
