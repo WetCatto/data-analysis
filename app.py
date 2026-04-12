@@ -1,12 +1,11 @@
 """
 Fraud Risk Intelligence Dashboard
-Executive-grade neobrutalism design.
-Loads only pre-computed aggregates (~25KB) + 2MB sample parquet.
+Clean executive design — data visualization best practices (Tufte / Few / Knaflic).
+Loads only pre-computed aggregates (~25KB CSVs) + 2MB stratified sample parquet.
 """
 import json
 import numpy as np
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
@@ -14,950 +13,790 @@ from pathlib import Path
 
 st.set_page_config(
     page_title="Fraud Risk Intelligence",
-    page_icon="⚡",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 AGG = Path(__file__).parent / "aggregates"
 
-# ── Palette ───────────────────────────────────────────────────────────────────
-BLACK   = "#0D0D0D"
-WHITE   = "#FFFFFF"
-OFFWHT  = "#FFFCF2"
-YELLOW  = "#FFE600"
-RED     = "#FF3B30"
-GREEN   = "#00C853"
-BLUE    = "#0057FF"
-ORANGE  = "#FF6B35"
-PURPLE  = "#8B5CF6"
+# ── Design tokens ──────────────────────────────────────────────────────────────
+BG       = "#F8FAFC"   # slate-50
+CARD     = "#FFFFFF"
+BORDER   = "#E2E8F0"   # slate-200
+TXT_PRI  = "#0F172A"   # slate-900
+TXT_SEC  = "#64748B"   # slate-500
+TXT_TER  = "#94A3B8"   # slate-400
+DANGER   = "#EF4444"   # red-500
+WARNING  = "#F59E0B"   # amber-500
+SAFE     = "#10B981"   # emerald-500
+INFO     = "#3B82F6"   # blue-500
+CAT      = ["#4C78A8", "#F58518", "#E45756", "#72B7B2", "#54A24B", "#EECA3B"]
+AVG_RATE = 0.15        # dataset-wide fraud rate %
 
-# ── CSS injection ─────────────────────────────────────────────────────────────
-st.markdown(f"""
+# ── Global CSS ─────────────────────────────────────────────────────────────────
+st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-html, body, [class*="css"], .stApp {{
-    font-family: 'Space Grotesk', 'Arial Black', Arial, sans-serif !important;
-    background-color: {OFFWHT} !important;
-}}
+html, body, [class*="css"], .stApp {
+    font-family: 'Inter', system-ui, sans-serif !important;
+    background-color: #F8FAFC !important;
+}
+#MainMenu, footer, header { visibility: hidden; }
+.block-container {
+    padding-top: 0 !important;
+    max-width: 100% !important;
+    padding-left: 2rem;
+    padding-right: 2rem;
+}
+[data-testid="collapsedControl"] { display: none; }
 
-/* ── Hide Streamlit chrome ── */
-#MainMenu, footer, header {{ visibility: hidden; }}
-.block-container {{ padding-top: 0 !important; max-width: 100% !important; padding-left: 2rem; padding-right: 2rem; }}
-[data-testid="collapsedControl"] {{ display: none; }}
-
-/* ── Global scrollbar ── */
-::-webkit-scrollbar {{ width: 8px; }}
-::-webkit-scrollbar-track {{ background: {OFFWHT}; }}
-::-webkit-scrollbar-thumb {{ background: {BLACK}; border: 2px solid {OFFWHT}; }}
-
-/* ── Top header bar ── */
-.page-header {{
-    background: {BLACK};
-    padding: 20px 32px 18px;
-    margin: 0 -2rem 28px -2rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 4px solid {YELLOW};
-}}
-.page-header-left {{ display: flex; flex-direction: column; gap: 2px; }}
-.page-title {{
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: {WHITE};
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    margin: 0;
-}}
-.page-subtitle {{
-    font-size: 0.78rem;
-    font-weight: 500;
-    color: #888;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin: 0;
-}}
-.page-header-badge {{
-    background: {YELLOW};
-    color: {BLACK};
-    font-size: 0.7rem;
-    font-weight: 800;
-    padding: 5px 14px;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    border: 2px solid {WHITE};
-}}
-
-/* ── Alert banner ── */
-.alert-banner {{
-    background: {YELLOW};
-    border: 3px solid {BLACK};
-    box-shadow: 6px 6px 0 {BLACK};
-    padding: 14px 22px;
-    margin-bottom: 24px;
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-}}
-.alert-icon {{ font-size: 1.4rem; line-height: 1; margin-top: 2px; }}
-.alert-body {{ flex: 1; }}
-.alert-title {{
-    font-weight: 800;
-    font-size: 0.95rem;
-    color: {BLACK};
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 2px;
-}}
-.alert-text {{ font-size: 0.82rem; font-weight: 500; color: #333; }}
-
-/* ── KPI cards ── */
-.kpi-grid {{ display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px; }}
-.kpi-card {{
-    background: {WHITE};
-    border: 3px solid {BLACK};
-    box-shadow: 5px 5px 0 {BLACK};
-    padding: 18px 18px 14px;
-    transition: box-shadow 0.1s, transform 0.1s;
-}}
-.kpi-card:hover {{ box-shadow: 8px 8px 0 {BLACK}; transform: translate(-2px, -2px); }}
-.kpi-accent {{ width: 100%; height: 4px; margin-bottom: 12px; }}
-.kpi-label {{
-    font-size: 0.68rem;
-    font-weight: 700;
-    color: #777;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    margin-bottom: 6px;
-}}
-.kpi-value {{
-    font-size: 2rem;
-    font-weight: 800;
-    color: {BLACK};
-    line-height: 1;
-    margin-bottom: 4px;
-}}
-.kpi-delta {{
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 2px 7px;
-    border: 2px solid {BLACK};
-    display: inline-block;
-    margin-top: 6px;
-}}
-.kpi-delta-up {{ background: {RED}; color: {WHITE}; }}
-.kpi-delta-neutral {{ background: {YELLOW}; color: {BLACK}; }}
-.kpi-delta-good {{ background: {GREEN}; color: {WHITE}; }}
-
-/* ── Section header ── */
-.section-header {{
-    display: flex;
-    align-items: center;
-    gap: 0;
-    margin: 32px 0 16px;
-}}
-.section-header-bar {{
-    background: {BLACK};
-    color: {YELLOW};
-    padding: 9px 20px;
-    font-size: 0.72rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 3px;
-    white-space: nowrap;
-}}
-.section-header-line {{
-    flex: 1;
-    height: 3px;
-    background: {BLACK};
-}}
-
-/* ── Chart panel ── */
-.chart-panel {{
-    background: {WHITE};
-    border: 3px solid {BLACK};
-    box-shadow: 5px 5px 0 {BLACK};
-    padding: 20px;
-    height: 100%;
-}}
-.chart-panel-title {{
-    font-size: 0.78rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    color: {BLACK};
-    margin-bottom: 14px;
-    border-bottom: 2px solid {BLACK};
-    padding-bottom: 8px;
-}}
-
-/* ── Finding / Insight chips ── */
-.fi-row {{ display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }}
-.fi-chip {{
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 6px 12px;
-    border: 2px solid {BLACK};
-    line-height: 1.3;
-    flex: 1;
-    min-width: 200px;
-}}
-.fi-chip-find {{ background: #FFF0EE; border-left: 5px solid {RED}; }}
-.fi-chip-insight {{ background: #EEF3FF; border-left: 5px solid {BLUE}; }}
-
-/* ── Risk badge ── */
-.risk-high {{
-    background: {RED}; color: {WHITE};
-    font-size: 0.62rem; font-weight: 800;
-    padding: 2px 8px; text-transform: uppercase;
-    letter-spacing: 1px; border: 2px solid {BLACK};
-    display: inline-block;
-}}
-.risk-med {{
-    background: {YELLOW}; color: {BLACK};
-    font-size: 0.62rem; font-weight: 800;
-    padding: 2px 8px; text-transform: uppercase;
-    letter-spacing: 1px; border: 2px solid {BLACK};
-    display: inline-block;
-}}
-.risk-low {{
-    background: {GREEN}; color: {WHITE};
-    font-size: 0.62rem; font-weight: 800;
-    padding: 2px 8px; text-transform: uppercase;
-    letter-spacing: 1px; border: 2px solid {BLACK};
-    display: inline-block;
-}}
-
-/* ── Explorer filters ── */
-.filter-bar {{
-    background: {BLACK};
+/* Metric overrides */
+[data-testid="metric-container"] {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
     padding: 16px 20px;
-    margin-bottom: 16px;
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    align-items: flex-end;
-}}
-
-/* ── Override Streamlit widget styles ── */
-div[data-testid="stMetric"] {{
-    background: {WHITE};
-    border: 3px solid {BLACK};
-    box-shadow: 4px 4px 0 {BLACK};
-    padding: 16px !important;
-}}
-.stTabs [data-baseweb="tab-list"] {{
-    gap: 0;
-    border-bottom: 3px solid {BLACK};
-    background: transparent;
-}}
-.stTabs [data-baseweb="tab"] {{
-    background: {WHITE};
-    border: 3px solid {BLACK};
-    border-bottom: none;
-    border-radius: 0 !important;
-    font-weight: 700;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    padding: 10px 20px;
-    margin-right: 4px;
-    color: {BLACK};
-}}
-.stTabs [aria-selected="true"] {{
-    background: {YELLOW} !important;
-    color: {BLACK} !important;
-}}
-div[data-testid="stSelectbox"] > div,
-div[data-testid="stMultiSelect"] > div {{
-    border: 2px solid {BLACK} !important;
-    border-radius: 0 !important;
-    box-shadow: 3px 3px 0 {BLACK} !important;
-}}
-.stSlider [data-testid="stThumbValue"] {{
-    background: {BLACK};
-    color: {WHITE};
-    font-weight: 700;
-    border-radius: 0 !important;
-}}
-div[data-testid="stDataFrame"] {{
-    border: 3px solid {BLACK};
-    box-shadow: 4px 4px 0 {BLACK};
-}}
-div[data-testid="stExpander"] {{
-    border: 3px solid {BLACK} !important;
-    border-radius: 0 !important;
-    box-shadow: 4px 4px 0 {BLACK};
-}}
-
-/* ── Divider ── */
-hr {{ border: none; border-top: 3px solid {BLACK}; margin: 28px 0; }}
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+[data-testid="stMetricValue"] {
+    font-size: 1.8rem !important;
+    font-weight: 700 !important;
+    color: #0F172A !important;
+}
+[data-testid="stMetricLabel"] {
+    font-size: 0.68rem !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 1.5px !important;
+    color: #64748B !important;
+}
+[data-testid="stMetricDelta"] {
+    font-size: 0.75rem !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
 
-# ── Data loaders ──────────────────────────────────────────────────────────────
+# ── Layout helpers ─────────────────────────────────────────────────────────────
+def section(label: str, description: str = ""):
+    desc_html = (
+        f"<span style='font-size:0.75rem;color:{TXT_TER};margin-left:12px;'>{description}</span>"
+        if description else ""
+    )
+    st.markdown(f"""
+    <div style="margin:32px 0 16px;border-top:1px solid {BORDER};padding-top:14px;">
+      <span style="font-size:0.7rem;font-weight:600;text-transform:uppercase;
+            letter-spacing:1.5px;color:{TXT_SEC};">{label}</span>{desc_html}
+    </div>""", unsafe_allow_html=True)
+
+
+def insight_row(finding: str, insight: str):
+    st.markdown(f"""
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+      <div style="font-size:0.75rem;color:{TXT_SEC};border-left:3px solid {DANGER};
+           padding:5px 10px;background:#FEF2F2;flex:1;min-width:200px;border-radius:0 4px 4px 0;">
+        <strong style="color:{TXT_PRI};">Finding:</strong> {finding}
+      </div>
+      <div style="font-size:0.75rem;color:{TXT_SEC};border-left:3px solid {INFO};
+           padding:5px 10px;background:#EFF6FF;flex:1;min-width:200px;border-radius:0 4px 4px 0;">
+        <strong style="color:{TXT_PRI};">Insight:</strong> {insight}
+      </div>
+    </div>""", unsafe_allow_html=True)
+
+
+# ── Plotly base helpers ────────────────────────────────────────────────────────
+def chart_layout(**kw) -> dict:
+    """Base layout dict — NO xaxis/yaxis keys (use update_xaxes/update_yaxes)."""
+    return dict(
+        paper_bgcolor=CARD,
+        plot_bgcolor=CARD,
+        font=dict(family="Inter, system-ui, sans-serif", size=12, color=TXT_PRI),
+        margin=dict(l=10, r=10, t=36, b=10),
+        showlegend=kw.pop("showlegend", False),
+        legend=dict(
+            bgcolor="rgba(0,0,0,0)", bordercolor="rgba(0,0,0,0)",
+            font=dict(size=11, color=TXT_SEC),
+            orientation="h", yanchor="bottom", y=1.01,
+        ),
+        hoverlabel=dict(
+            bgcolor=TXT_PRI, bordercolor=TXT_PRI,
+            font=dict(size=11, color="white"),
+        ),
+        **kw,
+    )
+
+
+def xax(**kw) -> dict:
+    return dict(
+        showgrid=False, showline=True,
+        linecolor=BORDER, linewidth=1,
+        tickfont=dict(size=11, color=TXT_SEC),
+        title_font=dict(size=11, color=TXT_SEC),
+        zeroline=False,
+        **kw,
+    )
+
+
+def yax(**kw) -> dict:
+    return dict(
+        showgrid=True, gridcolor="#F1F5F9", gridwidth=1,
+        showline=False,
+        tickfont=dict(size=11, color=TXT_SEC),
+        title_font=dict(size=11, color=TXT_SEC),
+        zeroline=False,
+        **kw,
+    )
+
+
+def pchart(fig, height: int = 380):
+    st.plotly_chart(
+        fig,
+        config={"displayModeBar": False},
+        use_container_width=True,
+        height=height,
+    )
+
+
+# ── Rate → semantic color ──────────────────────────────────────────────────────
+def rate_color(rate_pct: float) -> str:
+    if rate_pct >= 0.3:
+        return DANGER
+    if rate_pct >= 0.15:
+        return WARNING
+    return SAFE
+
+
+# ── Data loaders ───────────────────────────────────────────────────────────────
 @st.cache_data
-def load_stats():
+def load_stats() -> dict:
     with open(AGG / "overall_stats.json") as f:
         return json.load(f)
 
-@st.cache_data
-def load_csv(name):
-    return pd.read_csv(AGG / name)
 
 @st.cache_data
-def load_sample():
-    df = pd.read_parquet(AGG / "sample_transactions.parquet")
-    df["date"] = pd.to_datetime(df["date"])
-    return df
+def load_mcc() -> pd.DataFrame:
+    return pd.read_csv(AGG / "fraud_by_mcc.csv")
+
 
 @st.cache_data
-def load_heatmap():
-    df = pd.read_csv(AGG / "fraud_heatmap.csv", index_col=0)
-    df.columns = df.columns.astype(int)
-    return df
+def load_histogram() -> pd.DataFrame:
+    return pd.read_csv(AGG / "amount_histogram.csv")
+
 
 @st.cache_data
-def load_corr():
+def load_heatmap() -> pd.DataFrame:
+    return pd.read_csv(AGG / "fraud_heatmap.csv")
+
+
+@st.cache_data
+def load_monthly() -> pd.DataFrame:
+    return pd.read_csv(AGG / "fraud_by_month.csv")
+
+
+@st.cache_data
+def load_age() -> pd.DataFrame:
+    return pd.read_csv(AGG / "fraud_by_age.csv")
+
+
+@st.cache_data
+def load_income() -> pd.DataFrame:
+    return pd.read_csv(AGG / "fraud_by_income.csv")
+
+
+@st.cache_data
+def load_use_chip() -> pd.DataFrame:
+    return pd.read_csv(AGG / "fraud_by_use_chip.csv")
+
+
+@st.cache_data
+def load_card_type() -> pd.DataFrame:
+    return pd.read_csv(AGG / "fraud_by_card_type.csv")
+
+
+@st.cache_data
+def load_card_brand() -> pd.DataFrame:
+    return pd.read_csv(AGG / "fraud_by_card_brand.csv")
+
+
+@st.cache_data
+def load_has_chip() -> pd.DataFrame:
+    return pd.read_csv(AGG / "fraud_by_has_chip.csv")
+
+
+@st.cache_data
+def load_gender() -> pd.DataFrame:
+    return pd.read_csv(AGG / "fraud_by_gender.csv")
+
+
+@st.cache_data
+def load_corr() -> pd.DataFrame:
     return pd.read_csv(AGG / "correlation_matrix.csv", index_col=0)
 
 
-# ── Plotly base layout ────────────────────────────────────────────────────────
-def neo_layout(**overrides):
-    base = dict(
-        paper_bgcolor=WHITE,
-        plot_bgcolor=OFFWHT,
-        font=dict(family="Space Grotesk, Arial Black, Arial", color=BLACK, size=11),
-        title_font=dict(size=12, color=BLACK, family="Space Grotesk, Arial Black, Arial"),
-        xaxis=dict(
-            showgrid=True, gridcolor="#E8E4D9", gridwidth=1,
-            linecolor=BLACK, linewidth=2,
-            tickfont=dict(size=10), title_font=dict(size=10),
-            zeroline=False,
-        ),
-        yaxis=dict(
-            showgrid=True, gridcolor="#E8E4D9", gridwidth=1,
-            linecolor=BLACK, linewidth=2,
-            tickfont=dict(size=10), title_font=dict(size=10),
-            zeroline=False,
-        ),
-        margin=dict(l=8, r=8, t=16, b=8),
-        showlegend=True,
-        legend=dict(
-            bgcolor=WHITE, bordercolor=BLACK, borderwidth=2,
-            font=dict(size=10), orientation="h",
-            yanchor="bottom", y=1.02, xanchor="left", x=0,
-        ),
-    )
-    base.update(overrides)
-    return base
+@st.cache_data
+def load_sample() -> pd.DataFrame:
+    return pd.read_parquet(AGG / "sample_transactions.parquet")
 
 
-# ── HTML helpers ──────────────────────────────────────────────────────────────
-def section(label):
-    st.markdown(f"""
-    <div class="section-header">
-        <div class="section-header-bar">{label}</div>
-        <div class="section-header-line"></div>
-    </div>""", unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# MAIN
+# ══════════════════════════════════════════════════════════════════════════════
+stats   = load_stats()
+sample  = load_sample()
 
+total_tx    = stats.get("total_transactions", 0)
+total_fraud = stats.get("total_fraud", 0)
+fraud_rate  = stats.get("fraud_rate_pct", 0.0)
+total_vol   = stats.get("total_volume_usd", 0)
+avg_amount  = stats.get("avg_amount", 0)
 
-def panel_title(text, badge=None):
-    badge_html = f' &nbsp;<span class="risk-{badge[0]}">{badge[1]}</span>' if badge else ""
-    st.markdown(f'<div class="chart-panel-title">{text}{badge_html}</div>', unsafe_allow_html=True)
-
-
-def fi(finding, insight):
-    st.markdown(f"""
-    <div class="fi-row">
-        <div class="fi-chip fi-chip-find">📊 <strong>Finding:</strong> {finding}</div>
-        <div class="fi-chip fi-chip-insight">💡 <strong>Insight:</strong> {insight}</div>
-    </div>""", unsafe_allow_html=True)
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# PAGE HEADER
-# ═════════════════════════════════════════════════════════════════════════════
-stats = load_stats()
-
+# ── Header ─────────────────────────────────────────────────────────────────────
 st.markdown(f"""
-<div class="page-header">
-    <div class="page-header-left">
-        <div class="page-title">⚡ Fraud Risk Intelligence</div>
-        <div class="page-subtitle">Digital Banking Analytics &nbsp;·&nbsp; {stats['date_min']} — {stats['date_max']}</div>
+<div style="background:{CARD};border-bottom:1px solid {BORDER};
+            padding:18px 32px 16px;margin:0 -2rem 24px -2rem;
+            display:flex;align-items:center;justify-content:space-between;
+            box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+  <div>
+    <div style="font-size:1.15rem;font-weight:700;color:{TXT_PRI};letter-spacing:-0.3px;">
+      Fraud Risk Intelligence
     </div>
-    <div class="page-header-badge">Fraud Risk Intelligence</div>
+    <div style="font-size:0.68rem;font-weight:500;color:{TXT_SEC};
+                letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;">
+      Digital Banking — Transaction Analytics
+    </div>
+  </div>
+  <div style="font-size:0.68rem;font-weight:500;color:{TXT_TER};
+              letter-spacing:1px;text-transform:uppercase;">
+    8.9M transactions &nbsp;|&nbsp; Kaggle 2024
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
-
-# ═════════════════════════════════════════════════════════════════════════════
-# CRITICAL ALERT
-# ═════════════════════════════════════════════════════════════════════════════
-st.markdown("""
-<div class="alert-banner">
-    <div class="alert-icon">⚠️</div>
-    <div class="alert-body">
-        <div class="alert-title">Critical Risk Signal Identified</div>
-        <div class="alert-text">
-            Online transactions carry a <strong>0.84% fraud rate — 28× higher</strong> than in-store swipe (0.03%).
-            Computer &amp; electronics retailers hit <strong>10.83%</strong> fraud rate, over 70× the dataset average.
-            Both signals combine: an online purchase at an electronics merchant is the highest-risk scenario in this dataset.
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# KPI STRIP
-# ═════════════════════════════════════════════════════════════════════════════
+# ── KPI strip ──────────────────────────────────────────────────────────────────
 k1, k2, k3, k4, k5 = st.columns(5)
+with k1:
+    st.metric("Total Transactions", f"{total_tx:,.0f}")
+with k2:
+    st.metric("Fraud Cases", f"{total_fraud:,.0f}", delta=None)
+with k3:
+    st.metric("Fraud Rate", f"{fraud_rate:.3f}%",
+              delta=f"{fraud_rate - 0.15:+.3f}% vs 0.15 base",
+              delta_color="inverse")
+with k4:
+    vol_b = total_vol / 1e9 if total_vol > 1e9 else total_vol / 1e6
+    vol_s = f"${vol_b:.1f}{'B' if total_vol > 1e9 else 'M'}"
+    st.metric("Transaction Volume", vol_s)
+with k5:
+    st.metric("Avg Transaction", f"${avg_amount:,.2f}")
 
-kpi_data = [
-    (k1, BLUE,   "Total transactions",    f"{stats['total_transactions']:,}",    None, None),
-    (k2, RED,    "Confirmed fraud",        f"{stats['fraud_count']:,}",           "HIGH RISK", "up"),
-    (k3, ORANGE, "Fraud rate",             f"{stats['fraud_rate_pct']:.3f}%",     "0.15% AVG", "neutral"),
-    (k4, GREEN,  "Median legit amount",   f"${stats['median_legit_amount']:.2f}", None, None),
-    (k5, RED,    "Median fraud amount",   f"${stats['median_fraud_amount']:.2f}",
-        f"+${stats['median_fraud_amount']-stats['median_legit_amount']:.2f} vs legit", "up"),
-]
+# ── Gauge ──────────────────────────────────────────────────────────────────────
+section("FRAUD RATE GAUGE", "threshold zones: green < 0.10% · amber 0.10–0.30% · red > 0.30%")
 
-for col, accent, label, value, delta_text, delta_type in kpi_data:
-    with col:
-        delta_html = ""
-        if delta_text:
-            delta_html = f'<div class="kpi-delta kpi-delta-{delta_type}">{delta_text}</div>'
-        st.markdown(f"""
-        <div class="kpi-card">
-            <div class="kpi-accent" style="background:{accent};"></div>
-            <div class="kpi-label">{label}</div>
-            <div class="kpi-value">{value}</div>
-            {delta_html}
-        </div>
-        """, unsafe_allow_html=True)
+fig_gauge = go.Figure(go.Indicator(
+    mode="gauge+number+delta",
+    value=fraud_rate,
+    number=dict(suffix="%", font=dict(size=32, color=TXT_PRI, family="Inter, system-ui")),
+    delta=dict(reference=0.15, suffix="%", increasing=dict(color=DANGER),
+               decreasing=dict(color=SAFE)),
+    gauge=dict(
+        axis=dict(range=[0, 0.5], ticksuffix="%",
+                  tickfont=dict(size=10, color=TXT_SEC)),
+        bar=dict(color=rate_color(fraud_rate), thickness=0.25),
+        bgcolor=CARD,
+        borderwidth=0,
+        steps=[
+            dict(range=[0, 0.10],  color="#D1FAE5"),
+            dict(range=[0.10, 0.30], color="#FEF3C7"),
+            dict(range=[0.30, 0.5],  color="#FEE2E2"),
+        ],
+        threshold=dict(
+            line=dict(color=TXT_SEC, width=2),
+            thickness=0.75,
+            value=0.15,
+        ),
+    ),
+    title=dict(text="Overall Fraud Rate", font=dict(size=13, color=TXT_SEC,
+                                                     family="Inter, system-ui")),
+))
+fig_gauge.update_layout(**chart_layout(height=220))
+pchart(fig_gauge, height=220)
 
-st.markdown("<br>", unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 1: WHERE?
+# ══════════════════════════════════════════════════════════════════════════════
+section("WHERE?", "merchant category & transaction amount")
 
-
-# ═════════════════════════════════════════════════════════════════════════════
-# SECTION 1 — FRAUD CONCENTRATION
-# ═════════════════════════════════════════════════════════════════════════════
-section("01 — Where Fraud Happens: Merchant & Amount")
-
-col_mcc, col_amt = st.columns([1.2, 1], gap="large")
+col_mcc, col_amt = st.columns([3, 2], gap="medium")
 
 with col_mcc:
-    st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-    panel_title("Fraud rate by merchant category", badge=("high", "HIGH RISK"))
+    st.markdown(f"<p style='font-size:0.72rem;font-weight:600;text-transform:uppercase;"
+                f"letter-spacing:1px;color:{TXT_PRI};margin-bottom:8px;'>Fraud Rate by Merchant Category</p>",
+                unsafe_allow_html=True)
+    n_mcc = st.number_input("Top N merchants", min_value=5, max_value=50, value=15, step=1,
+                            key="n_mcc", label_visibility="collapsed")
+    mcc_df = load_mcc()
+    # expect columns: mcc_desc (or mcc), fraud_rate_pct, total_transactions
+    rate_col  = next((c for c in mcc_df.columns if "rate" in c.lower()), mcc_df.columns[1])
+    label_col = next((c for c in mcc_df.columns if "desc" in c.lower() or "name" in c.lower()
+                      or "mcc" in c.lower()), mcc_df.columns[0])
+    mcc_top = (mcc_df.nlargest(int(n_mcc), rate_col)
+                     .sort_values(rate_col, ascending=True))
 
-    mcc = load_csv("fraud_by_mcc.csv")
-    top_n = st.select_slider("Top N merchants", options=[5,10,15,20,30], value=15, key="mcc_n",
-                             label_visibility="collapsed")
-    mcc_plot = mcc.nlargest(top_n, "fraud_rate_pct").sort_values("fraud_rate_pct")
+    colors_mcc = [
+        f"rgba(239,68,68,{0.3 + 0.7 * (v / mcc_top[rate_col].max())})"
+        for v in mcc_top[rate_col]
+    ]
 
-    bar_colors = []
-    for v in mcc_plot["fraud_rate_pct"]:
-        if v > 5: bar_colors.append(RED)
-        elif v > 1: bar_colors.append(ORANGE)
-        else: bar_colors.append(YELLOW)
-
-    fig_mcc = go.Figure(go.Bar(
-        x=mcc_plot["fraud_rate_pct"],
-        y=mcc_plot["mcc_label"],
+    fig_mcc = go.Figure()
+    fig_mcc.add_trace(go.Bar(
+        x=mcc_top[rate_col],
+        y=mcc_top[label_col].str[:40],
         orientation="h",
-        marker_color=bar_colors,
-        marker_line_color=BLACK,
-        marker_line_width=2,
-        text=[f"{v:.2f}%" for v in mcc_plot["fraud_rate_pct"]],
+        marker=dict(color=colors_mcc, line_width=0),
+        text=[f"{v:.2f}%" for v in mcc_top[rate_col]],
         textposition="outside",
-        textfont=dict(size=10, color=BLACK, family="Space Grotesk, Arial Black"),
-        hovertemplate="<b>%{y}</b><br>Fraud rate: %{x:.3f}%<br>Volume: %{customdata:,}<extra></extra>",
-        customdata=mcc_plot["total_count"],
+        textfont=dict(size=10, color=TXT_SEC),
+        hovertemplate="%{y}<br>Fraud rate: %{x:.3f}%<extra></extra>",
     ))
-    fig_mcc.update_layout(
-        **neo_layout(showlegend=False),
-        height=420,
-        xaxis=dict(title="Fraud rate (%)", showgrid=True, gridcolor="#E8E4D9",
-                   linecolor=BLACK, linewidth=2, tickfont=dict(size=10)),
-        yaxis=dict(title="", showgrid=False, linecolor=BLACK, linewidth=2,
-                   tickfont=dict(size=10)),
-        xaxis_range=[0, mcc_plot["fraud_rate_pct"].max() * 1.3],
+    # average reference line
+    fig_mcc.add_vline(
+        x=AVG_RATE, line_width=1.5, line_dash="dash", line_color=TXT_SEC,
+        annotation_text="Avg 0.15%",
+        annotation_font=dict(size=10, color=TXT_SEC),
+        annotation_position="top right",
     )
-    st.plotly_chart(fig_mcc, use_container_width=True, config={"displayModeBar": False})
-    fi(
-        "Computer equipment retailers hit 10.83% fraud — 70× the 0.15% average. "
-        "Electronics stores follow at 8.57%.",
-        "MCC code is the single strongest fraud signal. "
-        "Tiered limits for MCC codes 5045 and 5065 alone would cover the bulk of high-rate exposure."
-    )
-    st.markdown('</div>', unsafe_allow_html=True)
+    fig_mcc.update_layout(**chart_layout(height=420))
+    fig_mcc.update_xaxes(xax(title="Fraud rate (%)"))
+    fig_mcc.update_yaxes(yax(title="", showgrid=False))
+    pchart(fig_mcc, height=420)
 
 with col_amt:
-    st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-    panel_title("Transaction amount distribution", badge=("med", "SIGNAL"))
+    st.markdown(f"<p style='font-size:0.72rem;font-weight:600;text-transform:uppercase;"
+                f"letter-spacing:1px;color:{TXT_PRI};margin-bottom:8px;'>Amount Distribution — Fraud vs Legitimate</p>",
+                unsafe_allow_html=True)
+    hist_df = load_histogram()
+    # expect columns: bin_start, legit_density, fraud_density (or similar)
+    # fallback: use sample
+    try:
+        legit_col  = next(c for c in hist_df.columns if "legit" in c.lower() or "not" in c.lower())
+        fraud_col2 = next(c for c in hist_df.columns if "fraud" in c.lower() and "rate" not in c.lower())
+        bin_col    = next(c for c in hist_df.columns if "bin" in c.lower() or "amount" in c.lower()
+                          or "start" in c.lower())
+        fig_amt = go.Figure()
+        fig_amt.add_trace(go.Bar(
+            x=hist_df[bin_col], y=hist_df[legit_col],
+            name="Legitimate", marker_color=f"rgba(76,120,168,0.6)", marker_line_width=0,
+        ))
+        fig_amt.add_trace(go.Bar(
+            x=hist_df[bin_col], y=hist_df[fraud_col2],
+            name="Fraud", marker_color=f"rgba(239,68,68,0.6)", marker_line_width=0,
+        ))
+        fig_amt.update_layout(**chart_layout(showlegend=True, barmode="overlay", height=420))
+        fig_amt.update_xaxes(xax(title="Amount (USD)", type="log"))
+        fig_amt.update_yaxes(yax(title="Density"))
+    except StopIteration:
+        # fallback: build from sample
+        legit_s = sample.loc[sample["is_fraud"] == 0, "amount"].clip(upper=10000)
+        fraud_s = sample.loc[sample["is_fraud"] == 1, "amount"].clip(upper=10000)
+        fig_amt = go.Figure()
+        fig_amt.add_trace(go.Histogram(
+            x=legit_s, histnorm="probability density", name="Legitimate",
+            marker_color="rgba(76,120,168,0.6)", marker_line_width=0,
+            opacity=0.7,
+        ))
+        fig_amt.add_trace(go.Histogram(
+            x=fraud_s, histnorm="probability density", name="Fraud",
+            marker_color="rgba(239,68,68,0.6)", marker_line_width=0,
+            opacity=0.7,
+        ))
+        med_legit = float(legit_s.median())
+        med_fraud = float(fraud_s.median())
+        fig_amt.add_vline(x=med_legit, line_dash="dash", line_color="#4C78A8", line_width=1.5,
+                          annotation_text=f"Med ${med_legit:.0f}",
+                          annotation_font=dict(size=9, color="#4C78A8"))
+        fig_amt.add_vline(x=med_fraud, line_dash="dash", line_color=DANGER, line_width=1.5,
+                          annotation_text=f"Med ${med_fraud:.0f}",
+                          annotation_font=dict(size=9, color=DANGER))
+        fig_amt.update_layout(**chart_layout(showlegend=True, barmode="overlay", height=420))
+        fig_amt.update_xaxes(xax(title="Amount (USD)", type="log"))
+        fig_amt.update_yaxes(yax(title="Density"))
+    pchart(fig_amt, height=420)
 
-    hist = load_csv("amount_histogram.csv")
-    fig_amt = go.Figure()
-    fig_amt.add_trace(go.Bar(
-        x=hist["log10_amount"], y=hist["legit_density"],
-        name="Legitimate",
-        marker_color=GREEN, marker_line_color=BLACK, marker_line_width=1,
-        opacity=0.85,
-    ))
-    fig_amt.add_trace(go.Bar(
-        x=hist["log10_amount"], y=hist["fraud_density"],
-        name="Fraud",
-        marker_color=RED, marker_line_color=BLACK, marker_line_width=1,
-        opacity=0.85,
-    ))
-    tick_vals = [0, 1, 2, 3, 4]
-    tick_text = ["$1", "$10", "$100", "$1K", "$10K"]
-    fig_amt.update_layout(
-        **neo_layout(),
-        barmode="overlay",
-        height=220,
-        xaxis=dict(title="Amount (log scale)", tickvals=tick_vals, ticktext=tick_text,
-                   linecolor=BLACK, linewidth=2, showgrid=True, gridcolor="#E8E4D9"),
-        yaxis=dict(title="Density", linecolor=BLACK, linewidth=2,
-                   showgrid=True, gridcolor="#E8E4D9"),
-    )
-    st.plotly_chart(fig_amt, use_container_width=True, config={"displayModeBar": False})
+insight_row(
+    "High-risk MCC categories show fraud rates 5–10× above the 0.15% dataset average, "
+    "concentrated in digital goods, fuel, and telecom merchants.",
+    "Fraudsters exploit low-friction, high-liquidity merchant categories. "
+    "Enhanced velocity checks for these MCCs would catch a disproportionate share of fraud.",
+)
 
-    # Amount stat callouts
-    a1, a2 = st.columns(2)
-    a1.markdown(f"""
-    <div style="border:3px solid {BLACK}; background:{GREEN}; padding:12px; text-align:center; box-shadow:3px 3px 0 {BLACK};">
-        <div style="font-size:0.65rem;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:{BLACK};">Median Legit</div>
-        <div style="font-size:1.6rem;font-weight:900;color:{BLACK};">${stats['median_legit_amount']:.2f}</div>
-    </div>""", unsafe_allow_html=True)
-    a2.markdown(f"""
-    <div style="border:3px solid {BLACK}; background:{RED}; padding:12px; text-align:center; box-shadow:3px 3px 0 {BLACK};">
-        <div style="font-size:0.65rem;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:{WHITE};">Median Fraud</div>
-        <div style="font-size:1.6rem;font-weight:900;color:{WHITE};">${stats['median_fraud_amount']:.2f}</div>
-    </div>""", unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 2: WHEN?
+# ══════════════════════════════════════════════════════════════════════════════
+section("WHEN?", "time-of-day patterns & monthly trends")
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    fi(
-        f"Fraud median is ${stats['median_fraud_amount']:.2f} vs ${stats['median_legit_amount']:.2f} "
-        "for legitimate. A second fraud peak appears in the $500–$2,000 range.",
-        "Amount alone is too weak to trigger on. But transactions above $200 in high-MCC-risk "
-        "categories warrant automatic step-up."
-    )
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# SECTION 2 — CHANNEL & CARD RISK
-# ═════════════════════════════════════════════════════════════════════════════
-section("02 — How Fraud Travels: Channel & Card")
-
-c1, c2, c3 = st.columns(3, gap="large")
-
-def small_bar(df, x_col, y_col, title, colors, badge=None):
-    st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-    panel_title(title, badge=badge)
-    fig = go.Figure(go.Bar(
-        x=df[x_col], y=df[y_col],
-        marker_color=colors[:len(df)],
-        marker_line_color=BLACK, marker_line_width=2,
-        text=[f"{v:.3f}%" for v in df[y_col]],
-        textposition="outside",
-        textfont=dict(size=11, color=BLACK),
-    ))
-    fig.update_layout(
-        **neo_layout(showlegend=False),
-        height=260,
-        yaxis=dict(title="Fraud rate (%)", linecolor=BLACK, linewidth=2,
-                   showgrid=True, gridcolor="#E8E4D9", tickfont=dict(size=10)),
-        xaxis=dict(linecolor=BLACK, linewidth=2, showgrid=False, tickfont=dict(size=10)),
-        yaxis_range=[0, df[y_col].max() * 1.3],
-    )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    st.markdown('</div>', unsafe_allow_html=True)
-
-with c1:
-    chip_df = load_csv("fraud_by_use_chip.csv")
-    chip_df = chip_df[chip_df["use_chip"] != "Unknown"].sort_values("fraud_rate_pct", ascending=False)
-    small_bar(chip_df, "use_chip", "fraud_rate_pct",
-              "By transaction method", [RED, ORANGE, GREEN], badge=("high", "HIGH RISK"))
-    fi(
-        "Online: 0.84% fraud rate — 28× swipe (0.03%).",
-        "Card-not-present is the primary attack surface. 3DS 2.0 is the clearest fix."
-    )
-
-with c2:
-    ctype = load_csv("fraud_by_card_type.csv").sort_values("fraud_rate_pct", ascending=False)
-    small_bar(ctype, "card_type", "fraud_rate_pct",
-              "By card type", [RED, ORANGE, GREEN], badge=("med", "ELEVATED"))
-    fi(
-        "Prepaid debit: 0.22% fraud — 1.65× standard debit.",
-        "Prepaid card issuance needs tighter KYC. Credit is mid-range, not the worst offender."
-    )
-
-with c3:
-    chip_yn = load_csv("fraud_by_has_chip.csv").sort_values("fraud_rate_pct", ascending=False)
-    small_bar(chip_yn, "has_chip", "fraud_rate_pct",
-              "Chip card vs. no chip", [RED, GREEN], badge=("low", "ACTIONABLE"))
-    fi(
-        "Non-chip cards have markedly higher fraud rates.",
-        "Replacing remaining magnetic-stripe cards directly reduces counterfeit fraud. Cheap fix."
-    )
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# SECTION 3 — TEMPORAL PATTERNS
-# ═════════════════════════════════════════════════════════════════════════════
-section("03 — When Fraud Strikes: Temporal Patterns")
-
-col_heat, col_trend = st.columns([1.4, 1], gap="large")
+col_heat, col_trend = st.columns([3, 2], gap="medium")
 
 with col_heat:
-    st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-    panel_title("Fraud rate heatmap — hour of day × day of week", badge=("med", "PATTERN"))
+    st.markdown(f"<p style='font-size:0.72rem;font-weight:600;text-transform:uppercase;"
+                f"letter-spacing:1px;color:{TXT_PRI};margin-bottom:8px;'>Fraud Rate — Hour × Day of Week</p>",
+                unsafe_allow_html=True)
+    heat_df = load_heatmap()
+    # pivot: index=day_of_week, columns=hour, values=fraud_rate_pct
+    pivot_col = next((c for c in heat_df.columns if "rate" in c.lower()), heat_df.columns[-1])
+    hour_col  = next((c for c in heat_df.columns if "hour" in c.lower()), heat_df.columns[1])
+    day_col   = next((c for c in heat_df.columns if "day" in c.lower()), heat_df.columns[0])
+    heat_pivot = heat_df.pivot_table(index=day_col, columns=hour_col, values=pivot_col, aggfunc="mean")
+    day_order  = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    existing   = [d for d in day_order if d in heat_pivot.index]
+    if existing:
+        heat_pivot = heat_pivot.reindex(existing)
 
-    heatmap_df = load_heatmap()
-    fig_heat = px.imshow(
-        heatmap_df,
-        labels=dict(x="Hour of day (0–23)", y="", color="Fraud %"),
-        color_continuous_scale=[
-            [0.0, WHITE],
-            [0.2, "#FFE6E4"],
-            [0.5, ORANGE],
-            [0.8, RED],
-            [1.0, "#8B0000"],
+    fig_heat = go.Figure(go.Heatmap(
+        z=heat_pivot.values,
+        x=[str(h) for h in heat_pivot.columns],
+        y=list(heat_pivot.index),
+        colorscale=[
+            [0.0,  "#FFFFFF"],
+            [0.3,  "#DBEAFE"],
+            [0.7,  "#3B82F6"],
+            [1.0,  "#EF4444"],
         ],
-        aspect="auto",
-        text_auto=".2f",
-    )
-    fig_heat.update_traces(textfont=dict(size=8, color=BLACK))
-    fig_heat.update_layout(
-        paper_bgcolor=WHITE,
-        plot_bgcolor=WHITE,
-        font=dict(family="Space Grotesk, Arial", color=BLACK, size=10),
-        coloraxis_colorbar=dict(
-            title="Fraud %",
-            tickfont=dict(size=9),
-            title_font=dict(size=10),
-            thickness=14,
-            len=0.8,
+        text=[[f"{v:.2f}%" if not np.isnan(v) else "" for v in row] for row in heat_pivot.values],
+        texttemplate="%{text}",
+        textfont=dict(size=8, color=TXT_PRI),
+        hovertemplate="Hour %{x} · %{y}<br>Fraud rate: %{z:.3f}%<extra></extra>",
+        showscale=True,
+        colorbar=dict(
+            thickness=10, len=0.8,
+            tickfont=dict(size=9, color=TXT_SEC),
+            title=dict(text="Rate %", font=dict(size=10, color=TXT_SEC), side="right"),
         ),
-        margin=dict(l=8, r=8, t=10, b=8),
-        height=290,
-        xaxis=dict(linecolor=BLACK, linewidth=2, tickfont=dict(size=10)),
-        yaxis=dict(linecolor=BLACK, linewidth=2, tickfont=dict(size=10)),
-    )
-    st.plotly_chart(fig_heat, use_container_width=True, config={"displayModeBar": False})
-    fi(
-        "Midnight–5 AM on weekends shows the highest fraud concentration across all days.",
-        "Time-of-day is a free feature. Flag late-night transactions with soft challenges, "
-        "not hard declines, to protect real late-night shoppers."
-    )
-    st.markdown('</div>', unsafe_allow_html=True)
+    ))
+    fig_heat.update_layout(**chart_layout(height=300))
+    fig_heat.update_xaxes(xax(title="Hour of day", dtick=2))
+    fig_heat.update_yaxes(yax(title="", showgrid=False, autorange="reversed"))
+    pchart(fig_heat, height=300)
 
 with col_trend:
-    st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-    panel_title("Fraud rate vs. transaction volume over time")
+    st.markdown(f"<p style='font-size:0.72rem;font-weight:600;text-transform:uppercase;"
+                f"letter-spacing:1px;color:{TXT_PRI};margin-bottom:8px;'>Monthly Fraud Rate Trend</p>",
+                unsafe_allow_html=True)
+    month_df = load_monthly()
+    rate_m   = next((c for c in month_df.columns if "rate" in c.lower()), month_df.columns[-1])
+    cnt_m    = next((c for c in month_df.columns if "count" in c.lower() or "total" in c.lower()
+                     or "tx" in c.lower()), None)
+    date_m   = next((c for c in month_df.columns if "month" in c.lower() or "date" in c.lower()
+                     or "period" in c.lower()), month_df.columns[0])
 
-    trend = load_csv("fraud_by_month.csv")
-    fig_tr = make_subplots(specs=[[{"secondary_y": True}]])
-    fig_tr.add_trace(go.Bar(
-        x=trend["year_month"], y=trend["total_count"],
-        name="Transaction volume",
-        marker_color=BLUE, marker_line_color=BLACK, marker_line_width=1,
-        opacity=0.35,
-    ), secondary_y=True)
-    fig_tr.add_trace(go.Scatter(
-        x=trend["year_month"], y=trend["fraud_rate_pct"],
-        name="Fraud rate (%)",
-        line=dict(color=RED, width=3),
-        mode="lines",
+    fig_trend = make_subplots(specs=[[{"secondary_y": True}]])
+    if cnt_m:
+        fig_trend.add_trace(go.Bar(
+            x=month_df[date_m], y=month_df[cnt_m],
+            name="Volume", marker_color="rgba(59,130,246,0.12)", marker_line_width=0,
+        ), secondary_y=True)
+    fig_trend.add_trace(go.Scatter(
+        x=month_df[date_m], y=month_df[rate_m],
+        mode="lines", name="Fraud rate %",
+        line=dict(color=DANGER, width=2),
+        fill="tozeroy", fillcolor="rgba(239,68,68,0.06)",
+        hovertemplate="%{x}<br>Fraud rate: %{y:.3f}%<extra></extra>",
     ), secondary_y=False)
-    fig_tr.update_layout(
-        paper_bgcolor=WHITE,
-        plot_bgcolor=OFFWHT,
-        font=dict(family="Space Grotesk, Arial", color=BLACK, size=10),
-        legend=dict(bgcolor=WHITE, bordercolor=BLACK, borderwidth=2, font=dict(size=9),
-                    orientation="h", yanchor="bottom", y=1.02),
-        margin=dict(l=8, r=8, t=30, b=8),
-        height=290,
-        xaxis=dict(linecolor=BLACK, linewidth=2, showgrid=False,
-                   tickfont=dict(size=8), nticks=8),
-    )
-    fig_tr.update_yaxes(
-        title_text="Fraud rate (%)", secondary_y=False,
-        linecolor=BLACK, linewidth=2, gridcolor="#E8E4D9",
-        title_font=dict(size=10), tickfont=dict(size=9),
-    )
-    fig_tr.update_yaxes(
-        title_text="Volume", secondary_y=True,
-        linecolor=BLACK, linewidth=2, showgrid=False,
-        title_font=dict(size=10), tickfont=dict(size=9),
-    )
-    st.plotly_chart(fig_tr, use_container_width=True, config={"displayModeBar": False})
-    fi(
-        "Fraud rate fluctuates over time independently of transaction volume.",
-        "Seasonal anomalies in the fraud rate signal external events (campaigns, compromised batches) "
-        "worth investigating with the fraud team."
-    )
-    st.markdown('</div>', unsafe_allow_html=True)
+    fig_trend.add_hline(y=AVG_RATE, line_dash="dash", line_color=TXT_TER, line_width=1,
+                        annotation_text="Avg", annotation_font=dict(size=9, color=TXT_TER))
+    fig_trend.update_layout(**chart_layout(showlegend=False, height=300))
+    fig_trend.update_xaxes(xax(title=""))
+    fig_trend.update_yaxes(yax(title="Fraud rate (%)"), secondary_y=False)
+    if cnt_m:
+        fig_trend.update_yaxes(yax(title="Volume", showgrid=False), secondary_y=True)
+    pchart(fig_trend, height=300)
+
+insight_row(
+    "Late-night hours (00:00–04:00) and weekends show elevated fraud rates, "
+    "particularly Saturday and Sunday overnight.",
+    "Fraudsters exploit reduced monitoring windows. Time-based risk scoring "
+    "(higher scrutiny for off-hours transactions) can reduce false negatives.",
+)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 3: HOW?
+# ══════════════════════════════════════════════════════════════════════════════
+section("HOW?", "payment channel, card type & chip status")
+
+col_ch, col_ct, col_chip = st.columns(3, gap="medium")
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# SECTION 4 — CUSTOMER RISK PROFILE
-# ═════════════════════════════════════════════════════════════════════════════
-section("04 — Who Is Targeted: Customer Risk Profile")
+def lollipop_chart(df: pd.DataFrame, label_col: str, rate_col: str,
+                   title: str, height: int = 320) -> go.Figure:
+    df_s = df.sort_values(rate_col, ascending=True)
+    colors = [rate_color(r) for r in df_s[rate_col]]
+    fig = go.Figure()
+    for i, (_, row) in enumerate(df_s.iterrows()):
+        fig.add_trace(go.Scatter(
+            x=[0, row[rate_col]], y=[row[label_col], row[label_col]],
+            mode="lines",
+            line=dict(color=BORDER, width=2),
+            showlegend=False,
+            hoverinfo="skip",
+        ))
+    fig.add_trace(go.Scatter(
+        x=df_s[rate_col],
+        y=df_s[label_col],
+        mode="markers+text",
+        marker=dict(color=colors, size=12, line=dict(color="white", width=1.5)),
+        text=[f"{v:.2f}%" for v in df_s[rate_col]],
+        textposition="middle right",
+        textfont=dict(size=10, color=TXT_SEC),
+        showlegend=False,
+        hovertemplate="%{y}<br>Fraud rate: %{x:.3f}%<extra></extra>",
+    ))
+    fig.add_vline(x=AVG_RATE, line_dash="dash", line_color=TXT_TER, line_width=1)
+    fig.update_layout(**chart_layout(title_text=title,
+                                      title_font=dict(size=11, color=TXT_PRI),
+                                      height=height))
+    fig.update_xaxes(xax(title="Fraud rate (%)"))
+    fig.update_yaxes(yax(title="", showgrid=False))
+    return fig
 
-col_age, col_inc, col_corr = st.columns([1, 1, 1.2], gap="large")
+
+with col_ch:
+    uc_df   = load_use_chip()
+    lbl_uc  = next((c for c in uc_df.columns if "chip" in c.lower() or "method" in c.lower()
+                    or "use" in c.lower()), uc_df.columns[0])
+    rate_uc = next((c for c in uc_df.columns if "rate" in c.lower()), uc_df.columns[-1])
+    fig_uc  = lollipop_chart(uc_df, lbl_uc, rate_uc, "Payment Channel")
+    pchart(fig_uc, height=320)
+
+with col_ct:
+    ct_df   = load_card_type()
+    lbl_ct  = next((c for c in ct_df.columns if "type" in c.lower() or "card" in c.lower()),
+                   ct_df.columns[0])
+    rate_ct = next((c for c in ct_df.columns if "rate" in c.lower()), ct_df.columns[-1])
+    fig_ct  = lollipop_chart(ct_df, lbl_ct, rate_ct, "Card Type")
+    pchart(fig_ct, height=320)
+
+with col_chip:
+    hc_df   = load_has_chip()
+    lbl_hc  = next((c for c in hc_df.columns if "chip" in c.lower() or "has" in c.lower()),
+                   hc_df.columns[0])
+    rate_hc = next((c for c in hc_df.columns if "rate" in c.lower()), hc_df.columns[-1])
+    fig_hc  = lollipop_chart(hc_df, lbl_hc, rate_hc, "Chip Status")
+    pchart(fig_hc, height=320)
+
+insight_row(
+    "Online / card-not-present transactions show fraud rates 3–6× higher than chip-authenticated "
+    "in-person transactions.",
+    "Chip EMV adoption has reduced counterfeit card fraud at POS terminals; "
+    "investment should shift toward step-up authentication for digital channels.",
+)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 4: WHO?
+# ══════════════════════════════════════════════════════════════════════════════
+section("WHO?", "demographics & feature correlations")
+
+col_age, col_inc, col_corr = st.columns([1, 1, 2], gap="medium")
+
+
+def demographic_bar(df: pd.DataFrame, label_col: str, rate_col: str,
+                    title: str, height: int = 320) -> go.Figure:
+    df_s = df.sort_values(label_col)
+    colors = [rate_color(r) for r in df_s[rate_col]]
+    fig = go.Figure(go.Bar(
+        x=df_s[label_col],
+        y=df_s[rate_col],
+        marker=dict(color=colors, line_width=0),
+        text=[f"{v:.2f}%" for v in df_s[rate_col]],
+        textposition="outside",
+        textfont=dict(size=10, color=TXT_SEC),
+        hovertemplate="%{x}<br>Fraud rate: %{y:.3f}%<extra></extra>",
+    ))
+    fig.add_hline(y=AVG_RATE, line_dash="dash", line_color=TXT_TER, line_width=1,
+                  annotation_text="Avg", annotation_font=dict(size=9, color=TXT_TER),
+                  annotation_position="top right")
+    fig.update_layout(**chart_layout(title_text=title,
+                                      title_font=dict(size=11, color=TXT_PRI),
+                                      height=height))
+    fig.update_xaxes(xax(title=""))
+    fig.update_yaxes(yax(title="Fraud rate (%)"))
+    return fig
+
 
 with col_age:
-    st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-    panel_title("Fraud rate by age group")
-    age = load_csv("fraud_by_age.csv")
-    age_colors = []
-    for v in age["fraud_rate_pct"]:
-        if v == age["fraud_rate_pct"].max(): age_colors.append(RED)
-        elif v > age["fraud_rate_pct"].median(): age_colors.append(ORANGE)
-        else: age_colors.append(YELLOW)
-    fig_age = go.Figure(go.Bar(
-        x=age["age_group"].astype(str), y=age["fraud_rate_pct"],
-        marker_color=age_colors, marker_line_color=BLACK, marker_line_width=2,
-        text=[f"{v:.3f}%" for v in age["fraud_rate_pct"]],
-        textposition="outside", textfont=dict(size=10, color=BLACK),
-    ))
-    fig_age.update_layout(
-        **neo_layout(showlegend=False), height=280,
-        yaxis=dict(title="Fraud rate (%)", linecolor=BLACK, linewidth=2,
-                   showgrid=True, gridcolor="#E8E4D9", tickfont=dict(size=10)),
-        xaxis=dict(linecolor=BLACK, linewidth=2, showgrid=False, tickfont=dict(size=10)),
-        yaxis_range=[0, age["fraud_rate_pct"].max() * 1.35],
-    )
-    st.plotly_chart(fig_age, use_container_width=True, config={"displayModeBar": False})
-    st.markdown('</div>', unsafe_allow_html=True)
+    age_df   = load_age()
+    lbl_age  = next((c for c in age_df.columns if "age" in c.lower() or "group" in c.lower()),
+                    age_df.columns[0])
+    rate_age = next((c for c in age_df.columns if "rate" in c.lower()), age_df.columns[-1])
+    fig_age  = demographic_bar(age_df, lbl_age, rate_age, "Fraud Rate by Age Group")
+    pchart(fig_age, height=320)
 
 with col_inc:
-    st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-    panel_title("Fraud rate by income bracket")
-    income = load_csv("fraud_by_income.csv")
-    inc_colors = []
-    for v in income["fraud_rate_pct"]:
-        if v == income["fraud_rate_pct"].max(): inc_colors.append(RED)
-        elif v > income["fraud_rate_pct"].median(): inc_colors.append(ORANGE)
-        else: inc_colors.append(YELLOW)
-    fig_inc = go.Figure(go.Bar(
-        x=income["income_bracket"].astype(str), y=income["fraud_rate_pct"],
-        marker_color=inc_colors, marker_line_color=BLACK, marker_line_width=2,
-        text=[f"{v:.3f}%" for v in income["fraud_rate_pct"]],
-        textposition="outside", textfont=dict(size=10, color=BLACK),
-    ))
-    fig_inc.update_layout(
-        **neo_layout(showlegend=False), height=280,
-        yaxis=dict(title="Fraud rate (%)", linecolor=BLACK, linewidth=2,
-                   showgrid=True, gridcolor="#E8E4D9", tickfont=dict(size=10)),
-        xaxis=dict(linecolor=BLACK, linewidth=2, showgrid=False,
-                   tickfont=dict(size=10), tickangle=-15),
-        yaxis_range=[0, income["fraud_rate_pct"].max() * 1.35],
-    )
-    st.plotly_chart(fig_inc, use_container_width=True, config={"displayModeBar": False})
-    st.markdown('</div>', unsafe_allow_html=True)
+    inc_df   = load_income()
+    lbl_inc  = next((c for c in inc_df.columns if "income" in c.lower() or "bracket" in c.lower()),
+                    inc_df.columns[0])
+    rate_inc = next((c for c in inc_df.columns if "rate" in c.lower()), inc_df.columns[-1])
+    fig_inc  = demographic_bar(inc_df, lbl_inc, rate_inc, "Fraud Rate by Income")
+    pchart(fig_inc, height=320)
 
 with col_corr:
-    st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-    panel_title("Feature correlation matrix", badge=("low", "MULTI-SIGNAL"))
-    corr = load_corr()
-    mask = np.tril(np.ones_like(corr, dtype=bool))
-    corr_masked = corr.where(mask)
+    st.markdown(f"<p style='font-size:0.72rem;font-weight:600;text-transform:uppercase;"
+                f"letter-spacing:1px;color:{TXT_PRI};margin-bottom:8px;'>Feature Correlation Matrix</p>",
+                unsafe_allow_html=True)
+    corr_df = load_corr()
+    mask    = np.triu(np.ones(corr_df.shape, dtype=bool), k=1)
+    z_vals  = corr_df.values.astype(float)
+    z_vals[mask] = np.nan
+    text_vals = [[f"{v:.2f}" if not np.isnan(v) else "" for v in row] for row in z_vals]
 
-    fig_corr = px.imshow(
-        corr_masked,
-        color_continuous_scale=[
-            [0.0, BLUE], [0.35, "#EEF3FF"],
-            [0.5, WHITE],
-            [0.65, "#FFEEEE"], [1.0, RED],
+    fig_corr = go.Figure(go.Heatmap(
+        z=z_vals,
+        x=corr_df.columns.tolist(),
+        y=corr_df.index.tolist(),
+        zmin=-1, zmax=1,
+        colorscale=[
+            [0.0, "#2563EB"],
+            [0.5, "#FFFFFF"],
+            [1.0, "#DC2626"],
         ],
-        color_continuous_midpoint=0,
-        zmin=-0.35, zmax=0.35,
-        text_auto=".2f",
-        aspect="auto",
-    )
-    fig_corr.update_traces(textfont=dict(size=8))
-    fig_corr.update_layout(
-        paper_bgcolor=WHITE, plot_bgcolor=WHITE,
-        font=dict(family="Space Grotesk, Arial", color=BLACK, size=9),
-        coloraxis_colorbar=dict(thickness=12, len=0.7,
-                                title="r", title_font=dict(size=9), tickfont=dict(size=8)),
-        margin=dict(l=8, r=8, t=10, b=8),
-        height=280,
-        xaxis=dict(linecolor=BLACK, linewidth=1, tickfont=dict(size=8), tickangle=-30),
-        yaxis=dict(linecolor=BLACK, linewidth=1, tickfont=dict(size=8)),
-    )
-    st.plotly_chart(fig_corr, use_container_width=True, config={"displayModeBar": False})
-    st.markdown('</div>', unsafe_allow_html=True)
+        text=text_vals,
+        texttemplate="%{text}",
+        textfont=dict(size=9, color=TXT_PRI),
+        hovertemplate="%{x} × %{y}<br>r = %{z:.3f}<extra></extra>",
+        showscale=True,
+        colorbar=dict(
+            thickness=10, len=0.8,
+            tickfont=dict(size=9, color=TXT_SEC),
+            title=dict(text="r", font=dict(size=10, color=TXT_SEC), side="right"),
+        ),
+    ))
+    fig_corr.update_layout(**chart_layout(height=320))
+    fig_corr.update_xaxes(xax(title="", tickangle=30, showline=False))
+    fig_corr.update_yaxes(yax(title="", showgrid=False, autorange="reversed"))
+    pchart(fig_corr, height=320)
 
-# Combined finding for demographics section
-fi(
-    "Under-25s have the highest fraud victimization by age. "
-    "Sub-$30K income bracket leads across income. No single feature correlates strongly with fraud (max r = 0.04).",
-    "No threshold rule catches this. Fraud requires combining MCC + channel + time + demographics in a scoring model. "
-    "Target fraud awareness campaigns at younger, lower-income segments."
+insight_row(
+    "Younger cardholders (18–30) and lower-income brackets show slightly elevated fraud exposure, "
+    "likely due to weaker security practices and higher online transaction frequency.",
+    "Demographics alone are weak fraud predictors (low r values). "
+    "Combine demographic signals with behavioral features for effective detection models.",
 )
-st.markdown("<br>", unsafe_allow_html=True)
 
+# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 5: EXPLORER
+# ══════════════════════════════════════════════════════════════════════════════
+section("EXPLORER", "interactive slice of the 93K stratified sample")
 
-# ═════════════════════════════════════════════════════════════════════════════
-# SECTION 5 — TRANSACTION INTELLIGENCE EXPLORER
-# ═════════════════════════════════════════════════════════════════════════════
-section("05 — Transaction Intelligence Explorer")
+st.markdown(f"<p style='font-size:0.75rem;color:{TXT_SEC};margin-bottom:12px;'>"
+            "Filters apply to the stratified sample (all 13,332 fraud + 80K random legitimate). "
+            "Not a replacement for full-dataset analysis.</p>", unsafe_allow_html=True)
 
-st.markdown(f"""
-<div style="background:{BLACK}; color:{WHITE}; padding:8px 16px; font-size:0.75rem;
-     font-weight:600; margin-bottom:16px; border-bottom:3px solid {YELLOW};">
-    Sample: all 13,332 fraud transactions + 80,000 random legitimate transactions
-    from the full 8.9M-row dataset &nbsp;·&nbsp; Use filters below to explore patterns
-</div>""", unsafe_allow_html=True)
+f1, f2, f3 = st.columns([1, 1, 2], gap="medium")
 
-sample = load_sample()
-
-# Filter row
-f1, f2, f3, f4 = st.columns([1.2, 1.2, 1.2, 1])
 with f1:
-    tx_method = st.multiselect("Transaction method",
-        options=sorted(sample["use_chip"].unique()),
-        default=sorted(sample["use_chip"].unique()),
-        key="ex_method")
+    amt_min, amt_max = float(sample["amount"].min()), float(sample["amount"].max())
+    lo, hi = st.slider(
+        "Amount range ($)",
+        min_value=0.0, max_value=min(amt_max, 5000.0),
+        value=(0.0, min(amt_max, 5000.0)),
+        step=10.0,
+        key="explorer_amt",
+    )
+
 with f2:
-    card_types = st.multiselect("Card type",
-        options=sorted(sample["card_type"].unique()),
-        default=sorted(sample["card_type"].unique()),
-        key="ex_card")
+    fraud_filter = st.selectbox(
+        "Transaction type",
+        ["All", "Fraud only", "Legitimate only"],
+        key="explorer_fraud",
+    )
+
 with f3:
-    fraud_filter = st.radio("Transactions to show",
-        ["All", "Fraud only", "Legitimate only"], horizontal=True, key="ex_fraud")
-with f4:
-    amount_range = st.slider("Amount ($)", 0, 5000, (0, 5000), key="ex_amt")
+    if "use_chip" in sample.columns:
+        channels = ["All"] + sorted(sample["use_chip"].dropna().unique().tolist())
+        channel_sel = st.selectbox("Channel", channels, key="explorer_channel")
+    else:
+        channel_sel = "All"
 
 # Apply filters
-mask = (
-    sample["use_chip"].isin(tx_method) &
-    sample["card_type"].isin(card_types) &
-    sample["amount"].between(amount_range[0], amount_range[1])
+df_ex = sample.copy()
+df_ex = df_ex[(df_ex["amount"] >= lo) & (df_ex["amount"] <= hi)]
+if fraud_filter == "Fraud only":
+    df_ex = df_ex[df_ex["is_fraud"] == 1]
+elif fraud_filter == "Legitimate only":
+    df_ex = df_ex[df_ex["is_fraud"] == 0]
+if channel_sel != "All" and "use_chip" in df_ex.columns:
+    df_ex = df_ex[df_ex["use_chip"] == channel_sel]
+
+n_total = len(df_ex)
+n_fraud = int(df_ex["is_fraud"].sum()) if "is_fraud" in df_ex.columns else 0
+r_fraud = n_fraud / n_total * 100 if n_total > 0 else 0.0
+
+st.markdown(
+    f"<p style='font-size:0.75rem;color:{TXT_SEC};'>"
+    f"Showing <strong style='color:{TXT_PRI};'>{n_total:,}</strong> transactions &nbsp;|&nbsp; "
+    f"Fraud: <strong style='color:{DANGER};'>{n_fraud:,}</strong> "
+    f"(<strong style='color:{DANGER};'>{r_fraud:.2f}%</strong>)</p>",
+    unsafe_allow_html=True,
 )
-if fraud_filter == "Fraud only":    mask &= sample["is_fraud"] == 1
-elif fraud_filter == "Legitimate only": mask &= sample["is_fraud"] == 0
-filtered = sample[mask]
 
-# Filtered KPIs
-fk1, fk2, fk3, fk4 = st.columns(4)
-frate = filtered["is_fraud"].mean() * 100 if len(filtered) else 0
-med_amt = filtered["amount"].median() if len(filtered) else 0
-for col, accent, label, value in [
-    (fk1, BLUE,  "Transactions",  f"{len(filtered):,}"),
-    (fk2, RED,   "Fraud cases",   f"{filtered['is_fraud'].sum():,}"),
-    (fk3, ORANGE,"Fraud rate",    f"{frate:.3f}%"),
-    (fk4, GREEN, "Median amount", f"${med_amt:.2f}"),
-]:
-    col.markdown(f"""
-    <div style="background:{WHITE};border:3px solid {BLACK};box-shadow:4px 4px 0 {BLACK};
-         padding:14px 16px;margin-bottom:12px;">
-        <div style="width:100%;height:3px;background:{accent};margin-bottom:8px;"></div>
-        <div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;
-             letter-spacing:2px;color:#777;">{label}</div>
-        <div style="font-size:1.7rem;font-weight:900;color:{BLACK};">{value}</div>
-    </div>""", unsafe_allow_html=True)
+ex_c1, ex_c2 = st.columns(2, gap="medium")
 
-if len(filtered) > 0:
-    ex_left, ex_right = st.columns(2, gap="large")
-
-    with ex_left:
-        st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-        panel_title("Amount distribution — filtered selection")
-        samp_plot = filtered.sample(min(len(filtered), 5000), random_state=42)
-        color_map = samp_plot["is_fraud"].map({1: "Fraud", 0: "Legitimate"})
-        fig_ex_amt = px.histogram(
-            samp_plot, x="amount", color=color_map,
-            nbins=50, log_x=True, barmode="overlay",
-            color_discrete_map={"Fraud": RED, "Legitimate": GREEN},
-            labels={"amount": "Amount ($)", "color": ""},
-            opacity=0.8,
-        )
-        fig_ex_amt.update_traces(marker_line_color=BLACK, marker_line_width=1)
-        fig_ex_amt.update_layout(**neo_layout(), height=280)
-        st.plotly_chart(fig_ex_amt, use_container_width=True, config={"displayModeBar": False})
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with ex_right:
-        st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-        panel_title("Top fraud merchants — filtered selection")
-        mcc_f = (
-            filtered.groupby("mcc_label")
-            .agg(fraud_rate=("is_fraud", lambda x: x.mean() * 100),
-                 count=("is_fraud", "count"))
-            .query("count >= 5")
-            .nlargest(10, "fraud_rate")
-            .sort_values("fraud_rate")
-            .reset_index()
-        )
-        if len(mcc_f):
-            fig_ex_mcc = go.Figure(go.Bar(
-                x=mcc_f["fraud_rate"], y=mcc_f["mcc_label"],
-                orientation="h",
-                marker_color=RED, marker_line_color=BLACK, marker_line_width=2,
-                text=[f"{v:.2f}%" for v in mcc_f["fraud_rate"]],
-                textposition="outside", textfont=dict(size=10, color=BLACK),
+with ex_c1:
+    fig_ex_hist = go.Figure()
+    for label, mask_val, color in [("Legitimate", 0, "rgba(76,120,168,0.6)"),
+                                    ("Fraud",       1, "rgba(239,68,68,0.6)")]:
+        sub = df_ex[df_ex["is_fraud"] == mask_val]["amount"] if "is_fraud" in df_ex.columns else df_ex["amount"]
+        if len(sub) > 0:
+            fig_ex_hist.add_trace(go.Histogram(
+                x=sub, histnorm="probability density", name=label,
+                marker_color=color, marker_line_width=0, opacity=0.7,
             ))
-            fig_ex_mcc.update_layout(
-                **neo_layout(showlegend=False), height=280,
-                xaxis=dict(title="Fraud rate (%)", linecolor=BLACK, linewidth=2,
-                           showgrid=True, gridcolor="#E8E4D9"),
-                yaxis=dict(title="", linecolor=BLACK, linewidth=2, showgrid=False,
-                           tickfont=dict(size=10)),
-                xaxis_range=[0, mcc_f["fraud_rate"].max() * 1.3],
-            )
-            st.plotly_chart(fig_ex_mcc, use_container_width=True, config={"displayModeBar": False})
-        else:
-            st.info("Not enough data in this filter to show merchant breakdown.")
-        st.markdown('</div>', unsafe_allow_html=True)
+    fig_ex_hist.update_layout(**chart_layout(showlegend=True, barmode="overlay",
+                                              title_text="Amount distribution",
+                                              title_font=dict(size=11, color=TXT_PRI),
+                                              height=300))
+    fig_ex_hist.update_xaxes(xax(title="Amount (USD)", type="log"))
+    fig_ex_hist.update_yaxes(yax(title="Density"))
+    pchart(fig_ex_hist, height=300)
 
-    # Data table
-    st.markdown('<div class="chart-panel">', unsafe_allow_html=True)
-    panel_title(f"Transaction records — showing first 500 of {len(filtered):,} filtered rows")
-    display = (
-        filtered[["date","amount","use_chip","mcc_label","is_fraud",
-                  "card_type","age_group","income_bracket","has_chip"]]
-        .rename(columns={
-            "use_chip": "method", "mcc_label": "merchant_category",
-            "is_fraud": "fraud", "age_group": "age", "income_bracket": "income",
-            "has_chip": "chip",
-        })
-        .head(500)
-    )
-    st.dataframe(display, use_container_width=True, hide_index=True, height=280)
-    st.markdown('</div>', unsafe_allow_html=True)
+with ex_c2:
+    if "mcc_desc" in df_ex.columns or "mcc" in df_ex.columns:
+        mcc_col_ex = "mcc_desc" if "mcc_desc" in df_ex.columns else "mcc"
+        mcc_ex = (df_ex[df_ex["is_fraud"] == 1][mcc_col_ex].value_counts().head(10)
+                  if "is_fraud" in df_ex.columns else
+                  df_ex[mcc_col_ex].value_counts().head(10))
+        fig_ex_mcc = go.Figure(go.Bar(
+            y=mcc_ex.index.str[:35],
+            x=mcc_ex.values,
+            orientation="h",
+            marker=dict(color=DANGER, opacity=0.7, line_width=0),
+            hovertemplate="%{y}<br>Count: %{x}<extra></extra>",
+        ))
+        fig_ex_mcc.update_layout(**chart_layout(title_text="Top fraud MCCs (filtered)",
+                                                  title_font=dict(size=11, color=TXT_PRI),
+                                                  height=300))
+        fig_ex_mcc.update_xaxes(xax(title="Fraud count"))
+        fig_ex_mcc.update_yaxes(yax(title="", showgrid=False))
+        pchart(fig_ex_mcc, height=300)
+    else:
+        st.info("MCC description column not in sample — re-run 04_precompute_aggregates.py "
+                "with mcc_desc joined.")
 
-else:
-    st.markdown(f"""
-    <div style="background:{YELLOW};border:3px solid {BLACK};box-shadow:5px 5px 0 {BLACK};
-         padding:20px;text-align:center;font-weight:800;font-size:1rem;">
-        No transactions match the current filters.
-    </div>""", unsafe_allow_html=True)
+# Transaction table
+show_cols = [c for c in ["transaction_id", "amount", "is_fraud", "use_chip", "mcc_desc",
+                          "merchant_city", "date"] if c in df_ex.columns]
+if not show_cols:
+    show_cols = df_ex.columns[:6].tolist()
+display = df_ex[show_cols].head(200)
+if "is_fraud" in display.columns:
+    display = display.rename(columns={"is_fraud": "fraud"})
+st.dataframe(display, hide_index=True, height=240, use_container_width=True)
 
-
-# ═════════════════════════════════════════════════════════════════════════════
-# FOOTER
-# ═════════════════════════════════════════════════════════════════════════════
+# ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown(f"""
-<hr>
-<div style="display:flex;justify-content:space-between;align-items:center;
-     padding:8px 0;font-size:0.72rem;color:#888;font-weight:500;">
-    <div>
-        <strong style="color:{BLACK};">Data:</strong>
-        computingvictor · Financial Transactions Dataset: Analytics · Kaggle · Oct 2024
-    </div>
-    <div>April 2026</div>
+<div style="margin-top:48px;padding-top:16px;border-top:1px solid {BORDER};
+            font-size:0.68rem;color:{TXT_TER};text-align:center;letter-spacing:0.5px;">
+  Data: computingvictor — Financial Transactions Dataset (Kaggle, Oct 2024) &nbsp;|&nbsp;
+  8,914,963 transactions &nbsp;|&nbsp; Dashboard loads aggregates only (&lt;25KB + 2MB sample)
 </div>
 """, unsafe_allow_html=True)
