@@ -75,6 +75,44 @@ html, body, [class*="css"], .stApp {
 [data-testid="stMetricDelta"] {
     font-size: 0.75rem !important;
 }
+
+/* Input / selectbox / number_input — keep light */
+[data-testid="stNumberInput"] input,
+[data-testid="stTextInput"] input,
+[data-baseweb="input"] input {
+    background: #FFFFFF !important;
+    color: #0F172A !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+}
+[data-baseweb="select"] > div,
+[data-baseweb="select"] [role="combobox"],
+[data-testid="stSelectbox"] > div > div {
+    background: #FFFFFF !important;
+    color: #0F172A !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+}
+/* Dropdown menu list */
+[data-baseweb="popover"] ul,
+[data-baseweb="menu"] {
+    background: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+}
+[data-baseweb="menu"] li {
+    color: #0F172A !important;
+}
+[data-baseweb="menu"] li:hover {
+    background: #F1F5F9 !important;
+}
+/* Slider track */
+[data-testid="stSlider"] [data-baseweb="slider"] div[role="slider"] {
+    background: #3B82F6 !important;
+    border-color: #3B82F6 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
