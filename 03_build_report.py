@@ -124,16 +124,12 @@ def cover_line(doc, text, bold=False, size=12, align=WD_ALIGN_PARAGRAPH.CENTER, 
     apply_font(run, bold=bold, size=size)
     return p
 
-cover_line(doc, "University of Southeastern Philippines", bold=True, size=14, space_after=2)
-cover_line(doc, "College of Information and Computing", size=12, space_after=20)
 cover_line(doc, " ", size=12, space_after=2)  # spacer
 
 cover_line(doc, "Transaction Patterns and Fraud Risk Indicators in Digital Banking:",
            bold=True, size=14, space_after=4)
 cover_line(doc, "A 2024 Data-Driven Analysis", bold=True, size=14, space_after=30)
 
-cover_line(doc, " ", size=12, space_after=2)
-cover_line(doc, "CSDS 327 — Data Visualization", size=12, space_after=2)
 cover_line(doc, " ", size=12, space_after=2)
 
 cover_line(doc, "Submitted by:", bold=True, size=12, space_after=4)
