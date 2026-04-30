@@ -61,8 +61,8 @@ save(fig, "fig1_fraud_by_mcc.png")
 # Fig 2 — Transaction Amount Distribution: Fraud vs. Legitimate (log scale)
 # ═════════════════════════════════════════════════════════════════════════════
 print("Fig 2: Amount distribution...")
-legit  = df.loc[df["is_fraud"] == 0, "amount"].clip(lower=0.01)
-fraud_ = df.loc[df["is_fraud"] == 1, "amount"].clip(lower=0.01)
+legit  = df.loc[(df["is_fraud"] == 0) & (df["amount"] >= 0.01), "amount"]
+fraud_ = df.loc[(df["is_fraud"] == 1) & (df["amount"] >= 0.01), "amount"]
 
 fig, ax = plt.subplots(figsize=(10, 5))
 ax.hist(np.log10(legit),  bins=80, color=LEGIT_COLOR,  alpha=0.6, label="Legitimate", density=True)

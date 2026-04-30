@@ -444,8 +444,8 @@ with col_amt:
         fig_amt.update_yaxes(yax(title="Density", rangemode="tozero"))
     else:
         # fallback: build from sample
-        legit_s = sample.loc[sample["is_fraud"] == 0, "amount"].clip(lower=0.01, upper=10000)
-        fraud_s = sample.loc[sample["is_fraud"] == 1, "amount"].clip(lower=0.01, upper=10000)
+        legit_s = sample.loc[(sample["is_fraud"] == 0) & (sample["amount"] >= 0.01) & (sample["amount"] <= 10000), "amount"]
+        fraud_s = sample.loc[(sample["is_fraud"] == 1) & (sample["amount"] >= 0.01) & (sample["amount"] <= 10000), "amount"]
         fig_amt = go.Figure()
         fig_amt.add_trace(go.Histogram(
             x=np.log10(legit_s), histnorm="probability density", name="Legitimate",
@@ -478,10 +478,11 @@ with col_amt:
     pchart(fig_amt, height=468)
 
 insight_row(
-    "High-risk MCC categories show fraud rates 5–10× above the 0.15% dataset average, "
-    "concentrated in digital goods, fuel, and telecom merchants.",
-    "Fraudsters exploit low-friction, high-liquidity merchant categories. "
-    "Enhanced velocity checks for these MCCs would catch a disproportionate share of fraud.",
+    "Computer and peripheral equipment retailers lead at 10.83% fraud rate, followed by "
+    "electronics stores (8.57%) and precious metals dealers (6.87%) — all 60× the 0.15% average. "
+    "Routine categories like grocery and fuel stay below 0.05%.",
+    "High-value, easily resalable goods attract disproportionate fraud. MCC-specific transaction "
+    "limits and step-up authentication above $500 for these categories would target the highest-risk segments.",
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -636,10 +637,11 @@ with col_chip:
     pchart(fig_hc, height=320)
 
 insight_row(
-    "Online / card-not-present transactions show fraud rates 3–6× higher than chip-authenticated "
-    "in-person transactions.",
-    "Chip EMV adoption has reduced counterfeit card fraud at POS terminals; "
-    "investment should shift toward step-up authentication for digital channels.",
+    "Online transactions carry a 0.84% fraud rate — 28× higher than swipe (0.03%) and 8× higher "
+    "than chip (0.10%). Prepaid debit (0.22%) outpaces standard debit (0.13%) and credit (0.16%). "
+    "Non-chip cards show markedly higher fraud than chip-enabled cards.",
+    "The card-not-present gap is the dominant fraud vector. 3D Secure 2.0, behavioral biometrics, "
+    "and phasing out non-chip cards are the highest-impact actions to reduce fraud exposure.",
 )
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -18,8 +18,8 @@ df = pd.read_parquet(BASE / "cleaned_transactions.parquet")
 print(f"  {len(df):,} rows | fraud rate: {df['is_fraud'].mean():.4%}")
 
 # ── 1. Overall stats ──────────────────────────────────────────────────────────
-legit  = df[df["is_fraud"] == 0]["amount"].clip(lower=0.01)
-fraud_ = df[df["is_fraud"] == 1]["amount"].clip(lower=0.01)
+legit  = df[(df["is_fraud"] == 0) & (df["amount"] >= 0.01)]["amount"]
+fraud_ = df[(df["is_fraud"] == 1) & (df["amount"] >= 0.01)]["amount"]
 
 stats = {
     "total_transactions": int(len(df)),
@@ -54,8 +54,8 @@ print("  fraud_by_mcc.csv")
 
 # ── 3. Amount histogram bins ──────────────────────────────────────────────────
 bins = np.linspace(0, 4.5, 91)   # log10 scale: $1 to $31,623
-legit_hist,  _ = np.histogram(np.log10(legit.clip(1)),  bins=bins)
-fraud_hist,  _ = np.histogram(np.log10(fraud_.clip(1)), bins=bins)
+legit_hist,  _ = np.histogram(np.log10(legit),  bins=bins)
+fraud_hist,  _ = np.histogram(np.log10(fraud_), bins=bins)
 bin_centers = (bins[:-1] + bins[1:]) / 2
 
 hist_df = pd.DataFrame({

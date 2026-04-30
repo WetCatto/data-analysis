@@ -13,7 +13,7 @@ from docx.oxml import OxmlElement
 
 BASE    = Path(__file__).parent
 FIGS    = BASE / "figures"
-OUTPUT  = BASE / "Transaction_Fraud_Analysis_Report_Humanized.docx"
+OUTPUT  = BASE / "Data_Analysis.docx"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -153,6 +153,16 @@ add_body(doc,
     "separates fraudulent transactions from legitimate ones requires examining the transaction data "
     "directly, without assuming which variables matter in advance."
 )
+add_heading(doc, "Importance of the Study")
+add_body(doc,
+    "Fraud detection in digital banking has direct financial and societal consequences. Financial "
+    "institutions that cannot distinguish fraudulent from legitimate transactions incur direct "
+    "monetary losses, damage customer trust, and face regulatory penalties. For customers, "
+    "undetected fraud causes financial harm and disrupts access to banking services. As digital "
+    "transaction volumes grow and fraud tactics evolve, data-driven approaches that can identify "
+    "patterns across millions of transactions are increasingly essential to maintaining the "
+    "integrity of digital financial infrastructure."
+)
 add_body(doc,
     "Research Question: What transaction characteristics and customer behaviors most significantly "
     "distinguish fraudulent transactions from legitimate ones in digital banking platforms?"
@@ -171,6 +181,7 @@ add_body(doc,
     "and is distributed across five related files."
 )
 add_body(doc, "Dataset overview:")
+add_bullet(doc, "Date collected: October 2024")
 add_bullet(doc, "Source: Kaggle (https://www.kaggle.com), computingvictor, October 2024")
 add_bullet(doc, "Labelled transactions: 8,914,963 records with fraud/legitimate classification")
 add_bullet(doc, "Fraud transactions: 13,332 (0.15% overall fraud rate)")
