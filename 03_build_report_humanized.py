@@ -1,19 +1,17 @@
 """
 03_build_report_humanized.py
-Humanized version of the report — less AI-sounding prose.
-Produces: Transaction_Fraud_Analysis_Report_Humanized.docx
-Original preserved as: Transaction_Fraud_Analysis_Report.docx
+Produces: Data_Analysis.docx
+Format: A4, Arial 12, 1.5 line spacing, justified indented paragraphs.
+Matches sample report style — paragraph-form narrative, italic Finding/Insight.
 """
 from pathlib import Path
 from docx import Document
 from docx.shared import Pt, Inches, Cm, RGBColor
 from docx.enum.text import WD_LINE_SPACING, WD_ALIGN_PARAGRAPH
-from docx.oxml.ns import qn
-from docx.oxml import OxmlElement
 
-BASE    = Path(__file__).parent
-FIGS    = BASE / "figures"
-OUTPUT  = BASE / "Data_Analysis.docx"
+BASE   = Path(__file__).parent
+FIGS   = BASE / "figures"
+OUTPUT = BASE / "Data_Analysis.docx"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -26,64 +24,92 @@ def set_margins(section, top=1.0, right=1.0, bottom=1.0, left=1.5):
     section.page_height   = Cm(29.7)
 
 
-def apply_font(run, bold=False, size=12, color=None):
-    run.font.name = "Arial"
-    run.font.size = Pt(size)
-    run.font.bold = bold
+def apply_font(run, bold=False, italic=False, size=12, color=None):
+    run.font.name   = "Arial"
+    run.font.size   = Pt(size)
+    run.font.bold   = bold
+    run.font.italic = italic
     if color:
         run.font.color.rgb = RGBColor(*color)
 
 
-def set_para_format(para, spacing=1.5, space_before=0, space_after=6, align=None):
+def set_para_format(para, spacing=1.5, space_before=0, space_after=6,
+                    align=WD_ALIGN_PARAGRAPH.JUSTIFY, first_indent=None):
     pf = para.paragraph_format
     pf.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
     pf.line_spacing      = spacing
     pf.space_before      = Pt(space_before)
     pf.space_after       = Pt(space_after)
-    if align:
-        pf.alignment = align
+    pf.alignment         = align
+    if first_indent is not None:
+        pf.first_line_indent = first_indent
 
 
 def add_heading(doc, text):
+    """Bold section or sub-section heading, left-aligned."""
     p = doc.add_paragraph()
-    set_para_format(p, space_before=12, space_after=6)
+    set_para_format(p, space_before=12, space_after=6,
+                    align=WD_ALIGN_PARAGRAPH.LEFT)
     run = p.add_run(text)
     apply_font(run, bold=True)
     return p
 
 
-def add_body(doc, text, align=None):
+def add_body(doc, text):
+    """Justified paragraph with first-line indent — standard narrative text."""
     p = doc.add_paragraph()
-    set_para_format(p, space_after=6)
+    set_para_format(p, space_after=6, align=WD_ALIGN_PARAGRAPH.JUSTIFY,
+                    first_indent=Inches(0.5))
     run = p.add_run(text)
     apply_font(run)
-    if align:
-        p.paragraph_format.alignment = align
     return p
 
 
-def add_finding_insight(doc, finding_text, insight_text):
-    p1 = doc.add_paragraph()
-    set_para_format(p1, space_after=4)
-    r1a = p1.add_run("Finding: ")
-    apply_font(r1a, bold=True)
-    r1b = p1.add_run(finding_text)
-    apply_font(r1b)
-
-    p2 = doc.add_paragraph()
-    set_para_format(p2, space_after=10)
-    r2a = p2.add_run("Insight: ")
-    apply_font(r2a, bold=True)
-    r2b = p2.add_run(insight_text)
-    apply_font(r2b)
+def add_label_line(doc, text):
+    """Plain left-aligned line for dataset field labels (Source:, Date:, etc.)."""
+    p = doc.add_paragraph()
+    set_para_format(p, space_after=2, align=WD_ALIGN_PARAGRAPH.LEFT)
+    run = p.add_run(text)
+    apply_font(run)
+    return p
 
 
 def add_bullet(doc, text):
     p = doc.add_paragraph(style="List Bullet")
-    set_para_format(p, space_after=4)
+    set_para_format(p, space_after=4, align=WD_ALIGN_PARAGRAPH.LEFT)
     run = p.add_run(text)
     apply_font(run)
     return p
+
+
+def add_numbered(doc, num, text):
+    """Numbered list item matching sample style (1. text)."""
+    p = doc.add_paragraph()
+    set_para_format(p, space_after=4, align=WD_ALIGN_PARAGRAPH.LEFT,
+                    first_indent=Inches(-0.25))
+    p.paragraph_format.left_indent = Inches(0.5)
+    run = p.add_run(f"{num}. {text}")
+    apply_font(run)
+    return p
+
+
+def add_finding_insight(doc, finding_text, insight_text):
+    """Italic Finding / Insight blocks matching sample report format."""
+    p1 = doc.add_paragraph()
+    set_para_format(p1, space_after=4, align=WD_ALIGN_PARAGRAPH.JUSTIFY,
+                    first_indent=Inches(0.5))
+    r1a = p1.add_run("Finding")
+    apply_font(r1a, italic=True, bold=False)
+    r1b = p1.add_run(": " + finding_text)
+    apply_font(r1b, italic=True)
+
+    p2 = doc.add_paragraph()
+    set_para_format(p2, space_after=12, align=WD_ALIGN_PARAGRAPH.JUSTIFY,
+                    first_indent=Inches(0.5))
+    r2a = p2.add_run("Insight")
+    apply_font(r2a, italic=True, bold=False)
+    r2b = p2.add_run(": " + insight_text)
+    apply_font(r2b, italic=True)
 
 
 def add_figure(doc, fig_path, caption=None, width=5.5):
@@ -93,9 +119,9 @@ def add_figure(doc, fig_path, caption=None, width=5.5):
     if caption:
         cp = doc.add_paragraph()
         cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        set_para_format(cp, space_after=8)
+        set_para_format(cp, space_after=8, align=WD_ALIGN_PARAGRAPH.CENTER)
         run = cp.add_run(caption)
-        apply_font(run, bold=False, size=10)
+        apply_font(run, size=10)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -112,29 +138,27 @@ section = doc.sections[0]
 set_margins(section)
 
 # ── COVER PAGE ────────────────────────────────────────────────────────────────
-def cover_line(doc, text, bold=False, size=12, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=6):
+def cover_line(doc, text, bold=False, size=12, space_after=6):
     p = doc.add_paragraph()
-    p.alignment = align
-    set_para_format(p, space_after=space_after)
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    set_para_format(p, space_after=space_after, align=WD_ALIGN_PARAGRAPH.CENTER)
     run = p.add_run(text)
     apply_font(run, bold=bold, size=size)
     return p
 
-cover_line(doc, " ", size=12, space_after=2)
+cover_line(doc, " ", space_after=24)
 
 cover_line(doc, "Transaction Patterns and Fraud Risk Indicators in Digital Banking:",
            bold=True, size=14, space_after=4)
-cover_line(doc, "A 2024 Data-Driven Analysis", bold=True, size=14, space_after=30)
+cover_line(doc, "A 2024 Data-Driven Analysis", bold=True, size=14, space_after=48)
 
-cover_line(doc, " ", size=12, space_after=2)
+cover_line(doc, "Submitted by:", bold=True, space_after=6)
+cover_line(doc, "[Member 1]", space_after=2)
+cover_line(doc, "[Member 2]", space_after=2)
+cover_line(doc, "[Member 3]", space_after=24)
 
-cover_line(doc, "Submitted by:", bold=True, size=12, space_after=4)
-cover_line(doc, "[Member 1]", size=12, space_after=2)
-cover_line(doc, "[Member 2]", size=12, space_after=2)
-cover_line(doc, "[Member 3]", size=12, space_after=12)
-
-cover_line(doc, "Instructor: [Instructor Name]", size=12, space_after=4)
-cover_line(doc, "Date: April 2026", size=12, space_after=0)
+cover_line(doc, "Instructor: [Instructor Name]", space_after=4)
+cover_line(doc, "Date: April 2026", space_after=0)
 
 doc.add_page_break()
 
@@ -153,6 +177,7 @@ add_body(doc,
     "separates fraudulent transactions from legitimate ones requires examining the transaction data "
     "directly, without assuming which variables matter in advance."
 )
+
 add_heading(doc, "Importance of the Study")
 add_body(doc,
     "Fraud detection in digital banking has direct financial and societal consequences. Financial "
@@ -163,33 +188,37 @@ add_body(doc,
     "patterns across millions of transactions are increasingly essential to maintaining the "
     "integrity of digital financial infrastructure."
 )
+
+add_heading(doc, "Research Question")
 add_body(doc,
-    "Research Question: What transaction characteristics and customer behaviors most significantly "
-    "distinguish fraudulent transactions from legitimate ones in digital banking platforms?"
+    "What transaction characteristics and customer behaviors most significantly distinguish "
+    "fraudulent transactions from legitimate ones in digital banking platforms?"
 )
-add_body(doc, "This study has three objectives:")
-add_bullet(doc, "Identify the merchant categories, transaction methods, and time windows with the highest fraud rates.")
-add_bullet(doc, "Examine whether customer demographic variables (age, income) are associated with fraud victimization.")
-add_bullet(doc, "Determine which card attributes (card type, chip technology) are most protective against fraud.")
+
+add_heading(doc, "Objectives")
+add_numbered(doc, 1, "Identify the merchant categories, transaction methods, and time windows with the highest fraud rates.")
+add_numbered(doc, 2, "Examine whether customer demographic variables (age, income) are associated with fraud victimization.")
+add_numbered(doc, 3, "Determine which card attributes (card type, chip technology) are most protective against fraud.")
 
 # ── II. DATASET DESCRIPTION ───────────────────────────────────────────────────
 doc.add_paragraph()
 add_heading(doc, "II. Dataset Description")
 add_body(doc,
-    "The dataset is \"Financial Transactions Dataset: Analytics,\" published on Kaggle by "
-    "computingvictor and last updated October 2024 [1]. It simulates a digital banking environment "
-    "and is distributed across five related files."
+    "The primary dataset used in this study is the \"Financial Transactions Dataset: Analytics,\" "
+    "published on Kaggle by computingvictor [1]. It simulates a realistic digital banking "
+    "environment and is distributed across five interrelated files covering transactions, customer "
+    "demographics, card attributes, fraud labels, and merchant category codes."
 )
-add_body(doc, "Dataset overview:")
-add_bullet(doc, "Date collected: October 2024")
-add_bullet(doc, "Source: Kaggle (https://www.kaggle.com), computingvictor, October 2024")
-add_bullet(doc, "Labelled transactions: 8,914,963 records with fraud/legitimate classification")
-add_bullet(doc, "Fraud transactions: 13,332 (0.15% overall fraud rate)")
-add_bullet(doc, "Date range: Multi-year, from 2010 onward")
 
-add_body(doc, "The five files and their contents:")
+add_label_line(doc, "Date collected: October 2024")
+add_label_line(doc, "Source: Kaggle (https://www.kaggle.com), computingvictor")
+add_label_line(doc, "Labelled transactions: 8,914,963 records with fraud/legitimate classification")
+add_label_line(doc, "Fraud transactions: 13,332 (0.15% overall fraud rate)")
+add_label_line(doc, "Date range: Multi-year, from 2010 onward")
 
-# Variables table
+doc.add_paragraph()
+add_body(doc, "The dataset is distributed across the following five files:")
+
 table = doc.add_table(rows=6, cols=3)
 table.style = "Table Grid"
 headers = ["File", "Records", "Key Variables"]
@@ -218,207 +247,292 @@ for row_idx, row_data in enumerate(rows_data, start=1):
             apply_font(run, size=10)
 
 doc.add_paragraph()
-add_body(doc, "Data limitations:")
-add_bullet(doc, "The data is synthetic and may not capture all the variation present in real-world fraud.")
-add_bullet(doc, "Approximately 33% of transactions had no fraud label and were excluded from analysis.")
-add_bullet(doc, "Merchant city and state were excluded due to high cardinality.")
-add_bullet(doc, "There are no behavioral signals like transaction velocity or device fingerprints.")
+add_heading(doc, "Limitations")
+add_numbered(doc, 1, "The data is synthetically generated and may not capture the full complexity of real-world fraud patterns.")
+add_numbered(doc, 2, "Approximately 33% of transactions had no fraud label and were excluded from the labelled analysis.")
+add_numbered(doc, 3, "Merchant city and state variables were excluded due to high cardinality.")
+add_numbered(doc, 4, "The dataset contains no behavioral signals such as transaction velocity or device fingerprinting.")
 
 # ── III. METHODOLOGY ─────────────────────────────────────────────────────────
 doc.add_paragraph()
 add_heading(doc, "III. Methodology")
 add_body(doc,
-    "The analysis used Python 3.12 throughout. The work moved through four stages:"
+    "The analysis was conducted using Python 3.12 as the primary programming language throughout. "
+    "The Pandas library was used for data cleaning, transformation, and statistical summarization. "
+    "Matplotlib and Seaborn were employed to produce the six visualizations included in this report. "
+    "The report itself was assembled programmatically using python-docx to ensure compliance with "
+    "the prescribed A4, Arial 12, 1.5-line-spacing format specification."
 )
-add_bullet(doc,
-    "Stage 1 - Data ingestion and optimization: The main transactions file is 1.2 GB, so column "
-    "dtypes were set explicitly during loading (int32, float32, category), which cut memory use by "
-    "around 60%. Fraud labels were loaded from JSON and joined to the transactions table.")
-add_bullet(doc,
-    "Stage 2 - Cleaning and feature engineering: Dollar signs and commas were stripped from "
-    "monetary fields (amount, yearly_income, credit_limit). Dates were parsed and broken into "
-    "hour, day of week, and month. Age and income were binned into groups. MCC integer codes were "
-    "replaced with readable category names using the lookup file.")
-add_bullet(doc,
-    "Stage 3 - Exploratory data analysis: Fraud rates were calculated across merchant categories, "
-    "transaction methods, card types, customer demographics, and time dimensions.")
-add_bullet(doc,
-    "Stage 4 - Visualization and reporting: Six charts were generated at 300 DPI using Matplotlib "
-    "and Seaborn. The report was assembled programmatically in python-docx to match the A4, "
-    "Arial 12, 1.5-line-spacing format specification.")
 add_body(doc,
-    "Tools used: Python 3.12, Pandas 2.x (data manipulation), Matplotlib 3.x and Seaborn 0.x "
-    "(visualization), python-docx 1.x (report generation), PyArrow (Parquet I/O).")
+    "The analytical process began with data ingestion and memory optimization. Because the primary "
+    "transactions file is approximately 1.2 GB, column data types were explicitly set during loading "
+    "— integer fields as int32, numeric fields as float32, and categorical fields as the pandas "
+    "category type — reducing memory use by approximately 60%. Fraud labels were loaded from a "
+    "separate JSON file and joined to the transactions table via an inner join on transaction ID, "
+    "producing a labelled dataset of 8,914,963 records."
+)
+add_body(doc,
+    "Data cleaning and feature engineering followed. Dollar signs and commas were stripped from "
+    "monetary fields (amount, yearly_income, credit_limit) and converted to numeric values. "
+    "Transaction dates were parsed and decomposed into hour-of-day, day-of-week, and month "
+    "attributes to enable temporal analysis. Age and income were binned into categorical groups "
+    "for demographic segmentation. MCC integer codes were replaced with readable merchant category "
+    "descriptions using the dataset's dedicated lookup file."
+)
+add_body(doc,
+    "Exploratory data analysis was then performed across all primary segmentation variables: "
+    "merchant categories, transaction methods, card types, customer demographics, and temporal "
+    "dimensions. Fraud rates were calculated as the proportion of fraudulent transactions within "
+    "each segment. Summary statistics — including medians and means — were computed for transaction "
+    "amounts, stratified by fraud status, to characterize the distributional differences between "
+    "legitimate and fraudulent activity."
+)
+add_body(doc,
+    "Finally, six high-quality visualizations were generated at 300 DPI to communicate the key "
+    "analytical findings: a merchant category fraud rate chart, a log-scale amount distribution "
+    "histogram, a fraud rate heatmap by hour and day of week, demographic bar charts by age group "
+    "and income bracket, card type and transaction method charts, and a Pearson correlation matrix "
+    "across all numerical features. Correlation analysis was conducted to examine linear "
+    "relationships between numerical features and the fraud label, confirming the need for "
+    "multivariate approaches in any subsequent fraud detection model."
+)
 
 # ── IV. DATA ANALYSIS & VISUAL FINDINGS ──────────────────────────────────────
 doc.add_paragraph()
 add_heading(doc, "IV. Data Analysis and Visual Findings")
 
 # --- Fig 1
-add_heading(doc, "Figure 1: Fraud rate by merchant category (top 15 highest-risk)")
+add_heading(doc, "A. Fraud Rate by Merchant Category (Top 15 Highest-Risk)")
 add_figure(doc, FIGS / "fig1_fraud_by_mcc.png",
            "Figure 1. Top 15 merchant categories ranked by fraud rate.")
 add_finding_insight(doc,
-    "Computer and peripheral equipment retailers had the highest fraud rate at 10.83%, followed by "
-    "electronics stores (8.57%) and precious stones and metals dealers (6.87%). Routine categories "
-    "like grocery stores and service stations stayed below 0.05%.",
-    "Electronics and luxury goods have high resale value, which makes them targets. Merchants in "
-    "these categories should require additional verification for larger transactions and apply tighter "
-    "velocity limits. Acquiring banks can address much of the dataset's fraud by treating these MCC "
-    "codes differently from low-risk categories."
+    "Computer and peripheral equipment retailers recorded the highest fraud rate at 10.83%, "
+    "followed by electronics stores (8.57%) and precious stones and metals dealers (6.87%). "
+    "These three categories are more than 45 times the dataset average of 0.15%. Routine "
+    "categories such as grocery stores and service stations remained below 0.05%.",
+    "High-value, easily resalable goods attract disproportionate fraud activity. Merchants in "
+    "computer equipment and electronics categories should face lower transaction limits and "
+    "mandatory step-up authentication for purchases above $500. Acquiring banks can reduce a "
+    "substantial share of total fraud losses by applying stricter controls specifically to "
+    "these MCC codes rather than across all merchant categories uniformly."
 )
 
 # --- Fig 2
-add_heading(doc, "Figure 2: Transaction amount distribution - fraud vs. legitimate")
+add_heading(doc, "B. Transaction Amount Distribution — Fraud vs. Legitimate")
 add_figure(doc, FIGS / "fig2_amount_distribution.png",
            "Figure 2. Log-scale histogram of transaction amounts by fraud status.")
 add_finding_insight(doc,
-    "Legitimate transactions are concentrated in the $10 to $100 range (median: $28.95), while "
-    "fraudulent transactions have a higher median of $69.97 and a longer right tail. The fraud "
-    "distribution has a secondary peak in the $500 to $2,000 range that is absent from legitimate "
-    "transactions.",
-    "Fraudulent transactions skew higher in amount, which is consistent with trying to maximize "
-    "return before detection. Amount alone is a weak fraud signal - its real value is as a "
-    "combined feature alongside MCC category and transaction method."
+    "Legitimate transactions are concentrated in the $10 to $100 range with a median of $28.95. "
+    "Fraudulent transactions have a distinctly higher median of $69.97 and a longer right tail "
+    "extending into the hundreds and low thousands of dollars. The fraud distribution is shifted "
+    "noticeably to the right relative to the legitimate distribution, with elevated density in "
+    "the $100 to $1,000 range that is not present in the legitimate curve.",
+    "Fraudulent transactions skew toward higher amounts, which is consistent with an intent to "
+    "maximize return before detection occurs. Transaction amount alone is a weak standalone "
+    "predictor — its value is greatest when used in combination with merchant category and "
+    "transaction method, where high-amount transactions at high-risk MCC codes provide a "
+    "compound signal worth acting on."
 )
 
 # --- Fig 3
-add_heading(doc, "Figure 3: Fraud rate heatmap - hour of day by day of week")
+add_heading(doc, "C. Fraud Rate Heatmap — Hour of Day by Day of Week")
 add_figure(doc, FIGS / "fig3_fraud_heatmap_time.png",
-           "Figure 3. Heatmap of fraud rate (%) by hour and day of week.")
+           "Figure 3. Heatmap of fraud rate (%) by hour of day and day of week.")
 add_finding_insight(doc,
-    "Fraud rates are elevated from midnight to 5:00 AM across all days, with the highest "
-    "concentrations on weekends between 1:00 AM and 4:00 AM. Weekday business hours (9:00 AM to "
-    "5:00 PM) have the lowest fraud rates, which makes sense - that is when most cardholders are "
-    "actively using their cards for routine purchases.",
-    "Time of day is a useful and cheap signal. A transaction at 3:00 AM from a computer equipment "
-    "retailer is worth a second look even if the amount seems ordinary. Banks can trigger "
-    "authentication challenges during off-peak hours rather than issuing hard declines, which "
-    "keeps the experience tolerable for legitimate late-night users."
+    "Fraud rates are elevated from midnight to 5:00 AM across all days of the week, with the "
+    "highest concentrations occurring on weekends between 1:00 AM and 4:00 AM. Weekday business "
+    "hours from 9:00 AM to 5:00 PM show the lowest fraud rates, reflecting periods of active "
+    "legitimate cardholder engagement.",
+    "Time of day is a low-cost and reliable fraud signal. A transaction at 3:00 AM from a "
+    "computer equipment retailer warrants scrutiny even if the amount appears ordinary. Financial "
+    "institutions can trigger soft authentication challenges — push notifications or one-time "
+    "passcodes — during off-peak hours rather than issuing hard declines, preserving access "
+    "for legitimate late-night users while increasing detection of fraudulent activity."
 )
 
 # --- Fig 4
-add_heading(doc, "Figure 4: Fraud rate by customer demographics")
+add_heading(doc, "D. Fraud Rate by Customer Demographics")
 add_figure(doc, FIGS / "fig4_fraud_by_demographic.png",
            "Figure 4. Fraud rate by age group (left) and annual income bracket (right).")
 add_finding_insight(doc,
-    "Customers under 25 had the highest fraud rate among age groups. The 55 to 64 cohort had "
-    "the lowest. Across income brackets, customers earning under $30,000 annually saw the highest "
-    "fraud rates, with rates declining as income increased.",
-    "Younger and lower-income customers see more fraud, probably because they are less cautious "
-    "with credentials and more likely to reuse passwords across accounts. These groups are also "
-    "less likely to notice unfamiliar charges quickly. Targeted in-app alerts and simpler fraud "
-    "reporting would help both detection speed and customer trust for these segments."
+    "Customers under 25 years of age exhibited the highest fraud rate among all age groups, while "
+    "the 55 to 64 cohort showed the lowest susceptibility. Across income brackets, customers "
+    "earning under $30,000 annually experienced the highest fraud rates, with rates declining "
+    "progressively as income increased.",
+    "Younger and lower-income customers are disproportionately affected by fraud, likely due to "
+    "less security-conscious digital behavior and a lower likelihood of noticing unfamiliar charges "
+    "quickly. Financial institutions should prioritize proactive fraud education, in-app alerts "
+    "for unusual activity, and simplified fraud reporting channels specifically for these "
+    "demographic segments."
 )
 
 # --- Fig 5
-add_heading(doc, "Figure 5: Fraud rate by card type and transaction method")
+add_heading(doc, "E. Fraud Rate by Card Type and Transaction Method")
 add_figure(doc, FIGS / "fig5_fraud_by_card_type.png",
            "Figure 5. Fraud rate by transaction method (left), card type (center), and chip availability (right).")
 add_finding_insight(doc,
-    "Online transactions had a fraud rate of 0.84%, which is 28 times higher than swipe "
-    "transactions (0.03%) and 8 times higher than chip transactions (0.10%). Prepaid debit cards "
-    "had a higher fraud rate (0.22%) than standard debit (0.13%) and credit (0.16%). Cards "
-    "without chip technology had markedly higher fraud rates than chip-enabled cards.",
-    "Online is where most of the fraud is happening. The card-not-present gap is the clearest "
-    "problem to fix: 3D Secure 2.0, behavioral biometrics, and stricter identity checks at "
-    "prepaid card issuance would all make a measurable difference. Non-chip cards should be "
-    "phased out, with prepaid customers prioritized given their elevated exposure."
+    "Online transactions recorded a fraud rate of 0.84%, which is 28 times higher than swipe "
+    "transactions (0.03%) and 8 times higher than chip-authenticated transactions (0.10%). "
+    "Prepaid debit cards exhibited a higher fraud rate (0.22%) compared to standard debit "
+    "(0.13%) and credit cards (0.16%). Cards without chip technology showed markedly higher "
+    "fraud rates than chip-enabled cards, confirming the protective value of EMV technology.",
+    "The card-not-present environment of online transactions is the dominant fraud vector in "
+    "this dataset. Investment in 3D Secure 2.0 protocols, behavioral biometrics for online "
+    "sessions, and enhanced KYC verification for prepaid card issuance are the highest-impact "
+    "interventions available. Accelerating the phase-out of non-chip cards, with prepaid "
+    "customers prioritized, would directly reduce counterfeit card fraud at physical terminals."
 )
 
 # --- Fig 6
-add_heading(doc, "Figure 6: Correlation matrix of numerical features")
+add_heading(doc, "F. Correlation Matrix of Numerical Features")
 add_figure(doc, FIGS / "fig6_correlation_heatmap.png",
            "Figure 6. Pearson correlation matrix of numerical features including the is_fraud label.")
 add_finding_insight(doc,
-    "No single numerical feature correlates strongly with the fraud label. Hour-of-day has the "
-    "highest positive correlation (r = +0.04), consistent with the time patterns in Figure 3. "
-    "Transaction amount shows a modest positive correlation, and credit score shows a slight "
-    "negative correlation. Feature inter-correlations are generally low.",
-    "The absence of any strong individual signal is useful to know: a simple rule like 'flag "
-    "transactions above $X' will not work well in isolation. Tree-based ensemble models "
-    "(Random Forest, Gradient Boosting) can pick up the non-linear combinations that linear "
-    "correlation misses. Adding velocity features and merchant-level deviation scores would "
-    "make those models considerably stronger."
+    "No single numerical feature shows a strong linear correlation with the fraud label. "
+    "Hour-of-day has the highest positive correlation at r = +0.04, consistent with the temporal "
+    "patterns identified in Figure 3. Transaction amount shows a modest positive correlation, "
+    "while credit score shows a slight negative correlation with fraud incidence. Feature "
+    "inter-correlations are generally low, indicating limited multicollinearity.",
+    "The absence of strong individual correlations confirms that fraud cannot be detected "
+    "reliably through any single threshold rule. This result supports the use of multivariate "
+    "modeling — particularly tree-based ensemble methods such as Gradient Boosting or Random "
+    "Forest, which can capture non-linear interactions between features. Augmenting the feature "
+    "set with velocity metrics and merchant-level deviation scores would significantly strengthen "
+    "any downstream classification model."
 )
 
-# ── V. KEY INSIGHTS ───────────────────────────────────────════════════════════
+# ── V. KEY INSIGHTS ──────────────────────────────────────────────────────────
 doc.add_paragraph()
 add_heading(doc, "V. Key Insights")
-add_body(doc, "Across 8,914,963 labelled transactions, five patterns stand out:")
-add_bullet(doc,
-    "Online transactions account for only 11.7% of total volume but carry a fraud rate of 0.84%, "
-    "which is 28 times the rate for swipe transactions. The card-not-present gap is the clearest "
-    "place to intervene.")
-add_bullet(doc,
-    "Merchant category separates fraud better than any other single variable. Computer and "
-    "electronics retailers hit fraud rates above 10%, more than 60 times the 0.15% average. "
-    "Any fraud detection system should treat MCC as a primary input.")
-add_bullet(doc,
-    "Most fraud happens between midnight and 5:00 AM, especially on weekends. Time-of-day "
-    "features are cheap to compute and reliably signal elevated risk.")
-add_bullet(doc,
-    "Non-chip cards have significantly higher fraud rates. Phasing them out reduces counterfeit "
-    "card fraud directly.")
-add_bullet(doc,
-    "Fraudulent transactions have a median amount of $69.97 versus $28.95 for legitimate ones. "
-    "Amount is a useful first-pass filter, especially when combined with MCC category.")
+add_body(doc,
+    "The analysis of 8,914,963 labelled digital banking transactions reveals that fraud is not "
+    "randomly distributed across the dataset. It is consistently concentrated along specific, "
+    "measurable dimensions — merchant category, transaction channel, time of day, and card "
+    "technology — each of which represents an actionable lever for fraud reduction."
+)
+add_body(doc,
+    "Online transactions are the dominant fraud channel, accounting for a fraud rate of 0.84% "
+    "despite representing only 11.7% of total transaction volume. This rate is 28 times higher "
+    "than swipe transactions and 8 times higher than chip-authenticated transactions. The "
+    "card-not-present environment is the single largest source of fraud exposure in the dataset "
+    "and represents the clearest opportunity for targeted intervention."
+)
+add_body(doc,
+    "Merchant category is the strongest segmentation variable identified in the analysis. "
+    "Computer and peripheral equipment retailers reach fraud rates above 10%, more than 60 times "
+    "the dataset average of 0.15%. Electronics stores and precious metals dealers follow closely. "
+    "Fraud is not evenly distributed across merchant types — it is heavily concentrated in "
+    "categories that sell high-value, easily liquidated goods, a pattern that has direct "
+    "implications for MCC-level risk policy."
+)
+add_body(doc,
+    "Temporal patterns provide a low-cost and reliable fraud signal. Fraud rates are "
+    "consistently elevated between midnight and 5:00 AM across all days, with the highest "
+    "concentrations on weekend overnight hours. Weekday business hours show the lowest fraud "
+    "rates. Because these features are derived from existing transaction timestamps, they can "
+    "be incorporated into real-time scoring models at no additional data collection cost."
+)
+add_body(doc,
+    "Card technology has a demonstrable protective effect. Non-chip cards show significantly "
+    "higher fraud rates than EMV chip-enabled cards, consistent with the well-documented "
+    "effectiveness of chip technology in suppressing counterfeit card fraud at physical "
+    "terminals. The remaining gap is concentrated in online channels, where chip technology "
+    "offers no protection, reinforcing the priority of investment in digital authentication."
+)
+add_body(doc,
+    "Transaction amount provides a useful supporting signal. The median fraudulent transaction "
+    "of $69.97 is more than double the median legitimate transaction of $28.95, and the fraud "
+    "distribution has a longer right tail extending into the hundreds and low thousands of "
+    "dollars. Amount is a weak standalone predictor but becomes a meaningful input when "
+    "combined with merchant category and transaction method in a composite risk score."
+)
 
-# ── VI. RECOMMENDATIONS ───────────────────────────────────────────────────────
+# ── VI. RECOMMENDATIONS ──────────────────────────────────────────────────────
 doc.add_paragraph()
 add_heading(doc, "VI. Recommendations")
 add_body(doc,
-    "Five actions would address the highest-risk patterns identified in this analysis:"
+    "Based on the findings of this analysis, five strategic actions are recommended to address "
+    "the highest-risk fraud patterns identified in the dataset. Each recommendation is grounded "
+    "directly in the quantitative results and targets a specific, measurable source of fraud exposure."
 )
-add_bullet(doc,
-    "Set MCC-specific transaction limits: Require step-up authentication for transactions "
-    "above $500 at high-risk MCC codes (5045, 5065, 5094). This targets the categories where "
-    "fraud rates exceed 10% without affecting the vast majority of low-risk transactions.")
-add_bullet(doc,
-    "Secure online channels with behavioral authentication: Online transactions are 28 times "
-    "more likely to be fraudulent than swipe transactions. All card-not-present transactions "
-    "should go through 3D Secure 2.0. Behavioral biometrics such as typing cadence and device "
-    "fingerprinting add another layer without significantly increasing friction for legitimate users.")
-add_bullet(doc,
-    "Add time-of-day to fraud scoring models: Hour-of-day and day-of-week are reliable risk "
-    "signals that cost nothing extra to collect. Transactions between midnight and 5:00 AM should "
-    "receive a higher risk score, triggering a soft challenge rather than a hard decline, so "
-    "legitimate late-night users are not blocked.")
-add_bullet(doc,
-    "Accelerate non-chip card phase-out: Non-EMV cards have substantially higher fraud rates, "
-    "and prepaid debit customers are the most exposed. Proactively mailing chip card replacements "
-    "to magnetic-stripe-only cardholders directly reduces counterfeit card fraud.")
-add_bullet(doc,
-    "Focus fraud awareness outreach on younger and lower-income customers: Customers under 25 "
-    "and those earning under $30,000 annually showed above-average victimization rates. In-app "
-    "alerts for unusual patterns and a straightforward reporting flow reduce both fraud volume "
-    "and the time it takes to catch it.")
+add_body(doc,
+    "First, financial institutions should implement MCC-specific transaction controls. Requiring "
+    "step-up authentication for transactions above $500 at the highest-risk merchant category "
+    "codes — computer equipment retailers (MCC 5045), electronics stores (MCC 5065), and precious "
+    "metals dealers (MCC 5094) — would directly target the categories where fraud rates exceed "
+    "10%, without creating friction across the vast majority of low-risk merchant transactions. "
+    "Dynamic limit structures calibrated to each category's baseline fraud rate would be more "
+    "effective than a uniform policy applied across all merchants."
+)
+add_body(doc,
+    "Second, online channel security requires dedicated and sustained investment. Online "
+    "transactions are 28 times more likely to be fraudulent than swipe transactions, and their "
+    "share of total transaction volume is growing. All card-not-present transactions should be "
+    "routed through 3D Secure 2.0. Layering behavioral biometrics — typing cadence, device "
+    "fingerprinting, and session anomaly detection — adds meaningful protection without "
+    "significantly increasing friction for legitimate users. Prepaid card programs, which showed "
+    "elevated fraud rates relative to standard debit and credit, should face enhanced identity "
+    "verification requirements at the point of issuance."
+)
+add_body(doc,
+    "Third, time-of-day risk scoring should be integrated into real-time fraud detection models. "
+    "Hour-of-day and day-of-week are reliable signals that can be derived from existing "
+    "transaction timestamps at no additional collection cost. Transactions between midnight and "
+    "5:00 AM, particularly on weekends, should receive a higher composite risk score that "
+    "triggers a soft authentication challenge — a push notification or one-time passcode — "
+    "rather than a hard decline. This preserves access for legitimate late-night users while "
+    "increasing scrutiny during the windows of greatest fraud concentration."
+)
+add_body(doc,
+    "Fourth, the phase-out of non-chip cards should be accelerated. Cards without EMV chip "
+    "technology show substantially higher fraud rates than chip-enabled alternatives, and "
+    "counterfeit card fraud at physical terminals remains a measurable contributor to overall "
+    "losses. Financial institutions should proactively issue chip card replacements to remaining "
+    "magnetic-stripe-only cardholders, with prepaid debit customers prioritized given their "
+    "elevated fraud exposure as identified in this analysis."
+)
+add_body(doc,
+    "Fifth, fraud awareness and monitoring programs should be targeted toward younger and "
+    "lower-income customer segments. Customers under 25 and those earning under $30,000 annually "
+    "showed above-average fraud victimization rates. Proactive in-app alerts for unusual "
+    "transaction patterns, personalized notifications when purchases occur in high-risk contexts, "
+    "and a streamlined fraud reporting process would reduce both the volume of undetected fraud "
+    "and the time required to identify and resolve it."
+)
 
 # ── VII. CONCLUSION ───────────────────────────────────────────────────────────
 doc.add_paragraph()
 add_heading(doc, "VII. Conclusion")
 add_body(doc,
-    "This study analyzed 8,914,963 labelled transactions to find what separates fraud from "
-    "legitimate activity. Fraud is not evenly spread. It clusters in electronics retailers, "
-    "online channels, late-night hours on weekends, and non-chip cards. The overall fraud rate "
-    "is low at 0.15%, but within specific segments it exceeds 10%."
+    "This study examined 8,914,963 labelled digital banking transactions to identify the "
+    "transaction characteristics and customer behaviors most significantly associated with fraud. "
+    "The findings confirm that fraud in digital banking is not randomly distributed. It clusters "
+    "in specific merchant categories, transaction channels, time windows, and card types, each "
+    "of which can be measured and targeted through data-driven controls."
 )
 add_body(doc,
-    "The online channel is the biggest single problem, with fraud rates 28 times higher than "
-    "swipe transactions. Computer equipment retailers reach 10% fraud rates against a 0.15% "
-    "dataset average. Chip cards suppress fraud relative to magnetic stripe, and time-of-day "
-    "turns out to be a cheap, reliable signal."
+    "The online channel emerges as the most critical vulnerability, with fraud rates 28 times "
+    "higher than physical swipe transactions. Merchant category is the strongest single "
+    "discriminator, with computer equipment retailers reaching fraud rates above 10% against "
+    "a dataset average of 0.15%. EMV chip technology demonstrably suppresses fraud at physical "
+    "terminals, and temporal patterns — particularly the elevated fraud during late-night weekend "
+    "hours — provide a reliable, zero-cost input for real-time risk scoring."
 )
 add_body(doc,
-    "These findings confirm that fraud detection works better when multiple signals are combined. "
-    "No single variable catches everything. Banks that use MCC category, transaction method, time "
-    "of day, and card type together in their scoring models should see a meaningful drop in fraud "
-    "rates without blocking too many legitimate transactions."
+    "These findings confirm the research question and establish that no single variable is "
+    "sufficient for fraud detection in isolation. The correlation matrix in Figure 6 shows "
+    "that individual features carry weak linear signals, which means effective detection "
+    "requires combining merchant category, transaction method, time of day, and card type "
+    "into a multivariate risk score. Financial institutions that operationalize these insights "
+    "through dynamic MCC-level controls, enhanced online channel authentication, and temporal "
+    "risk scoring stand to reduce fraud losses substantially while minimizing unnecessary "
+    "friction for legitimate customers."
 )
 add_body(doc,
-    "Follow-on work could add transaction velocity and geographic distance as features, test "
-    "classification models like Gradient Boosting or Isolation Forest, and validate these "
-    "patterns against data from a real financial institution rather than a simulated dataset."
+    "Future work should incorporate additional behavioral features such as transaction velocity "
+    "and geographic distance from prior activity, explore machine learning classification models "
+    "including Gradient Boosting and Isolation Forest, and validate these findings against live "
+    "production data from an actual financial institution rather than a simulated dataset."
 )
 
 # ── REFERENCES ────────────────────────────────────────────────────────────────
@@ -430,33 +544,32 @@ add_body(doc,
     "[Accessed: Apr. 12, 2026]."
 )
 add_body(doc,
-    "[2] T. Hastie, R. Tibshirani, and J. Friedman, The Elements of Statistical Learning: Data Mining, "
-    "Inference, and Prediction, 2nd ed. New York, NY, USA: Springer, 2009."
+    "[2] T. Hastie, R. Tibshirani, and J. Friedman, The Elements of Statistical Learning: "
+    "Data Mining, Inference, and Prediction, 2nd ed. New York, NY, USA: Springer, 2009."
 )
 add_body(doc,
-    "[3] A. Dal Pozzolo, O. Caelen, R. A. Johnson, and G. Bontempi, \"Calibrating probability with "
-    "undersampling for unbalanced classification,\" in Proc. IEEE Symp. Comput. Intell. Data Mining "
-    "(CIDM), Orlando, FL, USA, Dec. 2015, pp. 159-166."
+    "[3] A. Dal Pozzolo, O. Caelen, R. A. Johnson, and G. Bontempi, \"Calibrating probability "
+    "with undersampling for unbalanced classification,\" in Proc. IEEE Symp. Comput. Intell. "
+    "Data Mining (CIDM), Orlando, FL, USA, Dec. 2015, pp. 159-166."
 )
 
-# ── Save ──────────────────────────────────────────────────────────────────────
+# ── Save & Validate ───────────────────────────────────────────────────────────
 doc.save(OUTPUT)
 print(f"Saved -> {OUTPUT}")
 
-# ── Validate ──────────────────────────────────────────────────────────────────
 print("\n=== VALIDATION ===")
 doc2 = Document(OUTPUT)
 headings = [p.text for p in doc2.paragraphs if p.runs and p.runs[0].bold and
-            any(kw in p.text for kw in ["Introduction","Dataset","Methodology","Analysis","Insights",
-                                         "Recommendation","Conclusion","Reference"])]
-print(f"Section headings found: {len(headings)}")
+            any(kw in p.text for kw in ["Introduction", "Dataset", "Methodology", "Analysis",
+                                         "Insights", "Recommendation", "Conclusion", "Reference",
+                                         "Importance", "Research Question", "Objectives", "Limitations"])]
+print(f"Section/sub-section headings found: {len(headings)}")
 for h in headings:
     print(f"  * {h[:80]}")
 print(f"Embedded images: {len(doc2.inline_shapes)}")
 s = doc2.sections[0]
-print(f"Page size: {s.page_width.cm:.1f} cm x {s.page_height.cm:.1f} cm")
+print(f"Page size: {s.page_width.cm:.1f} cm x {s.page_height.cm:.1f} cm (A4 = 21.0 x 29.7)")
 print(f"Margins - Top:{s.top_margin.inches:.2f}\" Right:{s.right_margin.inches:.2f}\" "
       f"Bottom:{s.bottom_margin.inches:.2f}\" Left:{s.left_margin.inches:.2f}\"")
 total_words = sum(len(p.text.split()) for p in doc2.paragraphs)
 print(f"Estimated word count: {total_words:,}")
-print(f"\nOriginal preserved at: {BASE / 'Transaction_Fraud_Analysis_Report.docx'}")
